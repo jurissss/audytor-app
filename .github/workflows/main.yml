@@ -1,0 +1,45 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Unpack application
+        run: unzip -o audytor_app_mvp.zip
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Check Flutter
+        run: flutter --version
+
+      - name: Create Android project files
+        working-directory: audytor_app
+        run: flutter create --platforms=android .
+
+      - name: Install dependencies
+        working-directory: audytor_app
+        run: flutter pub get
+
+      - name: Build APK
+        working-directory: audytor_app
+        run: flutter build apk --release
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Audytor-Android
+          path: audytor_app/build/app/outputs/flutter-apk/app-release.apk
