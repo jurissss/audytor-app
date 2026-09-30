@@ -30,13 +30,67 @@ jobs:
         working-directory: audytor_app
         run: flutter create --platforms=android .
 
-      - name: Set Android compileSdk 36
-        working-directory: audytor_app
+      - name: Install Android SDK 36
         run: |
-          sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/' android/app/build.gradle.kts
-          grep -n "compileSdk" android/app/build.gradle.kts
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-36"
 
       - name: Install dependencies
+        working-directory: audytor_app
+        run: flutter pub get
+
+      - name: Force compileSdk 36
+        working-directory: audytor_app
+        run: |
+          echo "======================================"
+          echo "PATCH APPLICATION TO SDK 36"
+          echo "======================================"
+
+          if [ -f android/app/build.gradle.kts ]; then
+            sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/' android/app/build.gradle.kts
+            sed -i -E 's/compileSdk[[:space:]]*=[[:space:]]*[0-9]+/compileSdk = 36/g' android/app/build.gradle.kts
+            grep -n "compileSdk" android/app/build.gradle.kts || true
+          fi
+
+          if [ -f android/app/build.gradle ]; then
+            sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 36/' android/app/build.gradle
+            sed -i -E 's/compileSdkVersion[[:space:]]+[0-9]+/compileSdkVersion 36/g' android/app/build.gradle
+            grep -n "compileSdk" android/app/build.gradle || true
+          fi
+
+          echo ""
+          echo "======================================"
+          echo "PATCH FLUTTER PLUGINS TO SDK 36"
+          echo "======================================"
+
+          find ~/.pub-cache \( -name "build.gradle" -o -name "build.gradle.kts" \) -path "*/android/*" -type f -print0 | while IFS= read -r -d '' file
+          do
+            echo "Checking: $file"
+            sed -i -E 's/compileSdkVersion[[:space:]]+[0-9]+/compileSdkVersion 36/g' "$file"
+            sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 36/g' "$file"
+            sed -i -E 's/compileSdk[[:space:]]*=[[:space:]]*[0-9]+/compileSdk = 36/g' "$file"
+            sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/g' "$file"
+          done
+
+          echo ""
+          echo "======================================"
+          echo "VERIFY FILE_PICKER"
+          echo "======================================"
+
+          find ~/.pub-cache -path "*file_picker*/android/build.gradle*" -type f -print -exec grep -n "compileSdk" {} \; || true
+
+          echo ""
+          echo "======================================"
+          echo "VERIFY APP"
+          echo "======================================"
+
+          grep -R -n "compileSdk" android/app/build.gradle* || true
+
+      - name: Clean project
+        working-directory: audytor_app
+        run: flutter clean
+
+      - name: Restore dependencies
         working-directory: audytor_app
         run: flutter pub get
 
@@ -44,8 +98,19 @@ jobs:
         working-directory: audytor_app
         run: flutter build apk --release
 
+      - name: Verify APK
+        working-directory: audytor_app
+        run: |
+          echo "======================================"
+          echo "APK RESULT"
+          echo "======================================"
+          ls -lh build/app/outputs/flutter-apk/
+          test -f build/app/outputs/flutter-apk/app-release.apk
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Audytor-Android
           path: audytor_app/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 14
