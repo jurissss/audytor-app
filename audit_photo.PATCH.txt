@@ -1,4 +1,0 @@
-Dodaj:
-bool get isNameplate => kind == 'nameplate';
-bool get isIssue => kind == 'issue';
-Istniejące: bool get isResolution => kind == 'resolution';
