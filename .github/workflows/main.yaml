@@ -34,11 +34,7 @@ jobs:
         run: |
           set -e
 
-          echo "ANDROID_HOME=${ANDROID_HOME:-}"
-          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-}"
-
           SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
-
           SDKMANAGER=""
 
           for candidate in \
@@ -58,7 +54,6 @@ jobs:
 
           if [ -z "$SDKMANAGER" ]; then
             echo "ERROR: sdkmanager not found"
-            find /usr/local/lib/android -type f -name sdkmanager 2>/dev/null || true
             exit 1
           fi
 
@@ -76,16 +71,13 @@ jobs:
         shell: bash
         run: |
           if [ ! -d android ]; then
-            echo "Android directory missing - creating it"
             flutter create --platforms=android .
-          else
-            echo "Android directory already exists"
           fi
 
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Force compileSdk 36
+      - name: Force compileSdk 36 everywhere
         shell: bash
         run: |
           python3 <<'PY'
@@ -104,7 +96,92 @@ jobs:
               files += list(cache.rglob("android/build.gradle.kts"))
 
           for p in files:
+              try:
+                  s = p.read_text(encoding="utf-8")
+              except Exception:
+                  continue
 
+              old = s
+
+              # Kotlin DSL / Flutter
+              s = s.replace(
+                  "compileSdk = flutter.compileSdkVersion",
+                  "compileSdk = 36"
+              )
+
+              # Groovy / Flutter
+              s = s.replace(
+                  "compileSdkVersion flutter.compileSdkVersion",
+                  "compileSdkVersion 36"
+              )
+
+              # Groovy: compileSdkVersion 34
+              s = re.sub(
+                  r"\bcompileSdkVersion\s+[0-9]+\b",
+                  "compileSdkVersion 36",
+                  s
+              )
+
+              # Kotlin DSL: compileSdk = 34
+              s = re.sub(
+                  r"\bcompileSdk\s*=\s*[0-9]+\b",
+                  "compileSdk = 36",
+                  s
+              )
+
+              # Groovy: compileSdk 34
+              s = re.sub(
+                  r"\bcompileSdk\s+[0-9]+\b",
+                  "compileSdk 36",
+                  s
+              )
+
+              if s != old:
+                  p.write_text(s, encoding="utf-8")
+                  print("PATCHED:", p)
+
+          PY
+
+          echo ""
+          echo "=============================="
+          echo "APPLICATION SDK"
+          echo "=============================="
+          grep -R -n "compileSdk" android/app/build.gradle* || true
+
+          echo ""
+          echo "=============================="
+          echo "FILE_PICKER SDK"
+          echo "=============================="
+          find ~/.pub-cache \
+            -path "*file_picker*/android/build.gradle*" \
+            -type f \
+            -print \
+            -exec grep -n "compileSdk" {} \; || true
+
+      - name: Flutter clean
+        run: flutter clean
+
+      - name: Restore dependencies
+        run: flutter pub get
+
+      - name: Re-apply SDK36 patch after pub get
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+
+          cache = Path.home() / ".pub-cache"
+
+          files = []
+          files += list(Path("android").rglob("build.gradle"))
+          files += list(Path("android").rglob("build.gradle.kts"))
+
+          if cache.exists():
+              files += list(cache.rglob("android/build.gradle"))
+              files += list(cache.rglob("android/build.gradle.kts"))
+
+          for p in files:
               try:
                   s = p.read_text(encoding="utf-8")
               except Exception:
@@ -123,33 +200,32 @@ jobs:
               )
 
               s = re.sub(
-                  r"compileSdkVersion\s+[0-9]+",
+                  r"\bcompileSdkVersion\s+[0-9]+\b",
                   "compileSdkVersion 36",
                   s
               )
 
               s = re.sub(
-                  r"compileSdk\s*=\s*[0-9]+",
+                  r"\bcompileSdk\s*=\s*[0-9]+\b",
                   "compileSdk = 36",
+                  s
+              )
+
+              s = re.sub(
+                  r"\bcompileSdk\s+[0-9]+\b",
+                  "compileSdk 36",
                   s
               )
 
               if s != old:
                   p.write_text(s, encoding="utf-8")
-                  print("PATCHED:", p)
+                  print("PATCHED AGAIN:", p)
 
           PY
 
           echo ""
           echo "=============================="
-          echo "APPLICATION SDK"
-          echo "=============================="
-
-          grep -R -n "compileSdk" android/app/build.gradle* || true
-
-          echo ""
-          echo "=============================="
-          echo "FILE_PICKER SDK"
+          echo "FINAL FILE_PICKER SDK"
           echo "=============================="
 
           find ~/.pub-cache \
@@ -157,12 +233,6 @@ jobs:
             -type f \
             -print \
             -exec grep -n "compileSdk" {} \; || true
-
-      - name: Flutter clean
-        run: flutter clean
-
-      - name: Restore dependencies
-        run: flutter pub get
 
       - name: Build APK
         run: flutter build apk --release
