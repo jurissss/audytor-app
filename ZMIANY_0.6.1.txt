@@ -1,6 +1,0 @@
-Audytor 0.6.1
-- Raport PDF: 6 usterek na stronie (2 kolumny x 3 wiersze).
-- Każda usterka ma małą miniaturę, numer, priorytet, lokalizację, opis i status.
-- Kliknięcie karty usterki w PDF prowadzi do sekcji większych zdjęć w ZDJECIA.html, gdy PDF jest otwierany z rozpakowanej paczki.
-- Większe zdjęcia pozostają skompresowane w paczce audytu.
-- PDF nie umieszcza już osobnej dużej strony zdjęć dla każdej usterki.
