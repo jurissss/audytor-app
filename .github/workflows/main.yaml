@@ -1,0 +1,126 @@
+name: Audytor Android
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Flutter version
+        run: flutter --version
+
+      - name: Install Android SDK 36
+        shell: bash
+        run: |
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER=""
+          for candidate in \
+            "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
+            "$SDK_ROOT/cmdline-tools/16.0/bin/sdkmanager" \
+            "$SDK_ROOT/cmdline-tools/12.0/bin/sdkmanager"
+          do
+            if [ -x "$candidate" ]; then
+              SDKMANAGER="$candidate"
+              break
+            fi
+          done
+          if [ -z "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "$SDK_ROOT" -type f -name sdkmanager -perm -111 2>/dev/null | head -n 1 || true)"
+          fi
+          if [ -z "$SDKMANAGER" ]; then
+            echo "sdkmanager not found"
+            exit 1
+          fi
+          yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+          "$SDKMANAGER" \
+            "platform-tools" \
+            "platforms;android-36" \
+            "build-tools;36.0.0"
+
+      - name: Create Android platform
+        shell: bash
+        run: |
+          if [ ! -d android ]; then
+            flutter create \
+              --project-name audytor_app \
+              --platforms=android \
+              .
+          fi
+
+      - name: Remove generated default test
+        shell: bash
+        run: rm -f test/widget_test.dart
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Force compileSdk 36
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+
+          files = []
+          files += list(Path("android").rglob("build.gradle"))
+          files += list(Path("android").rglob("build.gradle.kts"))
+          cache = Path.home() / ".pub-cache"
+          if cache.exists():
+              files += list(cache.rglob("android/build.gradle"))
+              files += list(cache.rglob("android/build.gradle.kts"))
+
+          for p in files:
+              try:
+                  s = p.read_text(encoding="utf-8")
+              except Exception:
+                  continue
+              old = s
+              s = s.replace("compileSdk = flutter.compileSdkVersion", "compileSdk = 36")
+              s = s.replace("compileSdkVersion flutter.compileSdkVersion", "compileSdkVersion 36")
+              s = re.sub(r"\bcompileSdkVersion\s+[0-9]+\b", "compileSdkVersion 36", s)
+              s = re.sub(r"\bcompileSdk\s*=\s*[0-9]+\b", "compileSdk = 36", s)
+              s = re.sub(r"\bcompileSdk\s+[0-9]+\b", "compileSdk 36", s)
+              if s != old:
+                  p.write_text(s, encoding="utf-8")
+                  print("PATCHED:", p)
+          PY
+
+      - name: Flutter analyze
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Build release APK
+        run: flutter build apk --release
+
+      - name: Verify APK
+        shell: bash
+        run: |
+          ls -lh build/app/outputs/flutter-apk/
+          test -f build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Audytor-Android
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 14
