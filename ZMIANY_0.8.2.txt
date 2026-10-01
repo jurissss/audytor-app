@@ -1,0 +1,10 @@
+Audytor 0.8.2+15
+
+Zmiany w raporcie PDF:
+- zachowany dotychczasowy układ tabeli raportu,
+- każda miniatura zdjęcia w tabeli jest klikalna,
+- kliknięcie przenosi do dużej wersji zdjęcia na końcu tego samego pliku PDF,
+- każde zdjęcie ma osobną stronę A4,
+- duże zdjęcia są przygotowywane do 2200 px i jakości JPEG 90,
+- na stronie zdjęcia znajduje się link „Powrót do usterki”,
+- rozwiązanie działa lokalnie, bez Internetu i bez Google Drive.

@@ -1,6 +1,6 @@
 # Audytor
 
-Wersja 0.8.1+14.
+Wersja 0.8.2+15.
 
 Najważniejsze funkcje:
 - wyszukiwarka obiektów na ekranie głównym,
@@ -20,3 +20,12 @@ Najważniejsze funkcje:
 
 Poprawka build #41:
 - poprawione pozycjonowanie zdjęć w PDF dla pakietu pdf 3.11.x (bez nieobsługiwanych parametrów width/height w pw.Positioned).
+
+
+## Wersja 0.8.2+15 – duże zdjęcia w PDF
+- układ głównego raportu pozostaje bez zmian,
+- każda miniatura w tabeli jest klikalna,
+- kliknięcie miniatury przenosi do dużej wersji zdjęcia na końcu tego samego PDF,
+- każde zdjęcie ma osobną stronę A4 i wysoką rozdzielczość do powiększania,
+- na stronie dużego zdjęcia jest link „Powrót do usterki”,
+- dokumentacja działa bez internetu i bez Google Drive.

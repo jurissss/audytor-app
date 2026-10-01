@@ -1,7 +1,7 @@
 name: audytor_app
 description: Aplikacja Audytor do wykonywania audytów, reaudytów i raportów PDF.
 publish_to: 'none'
-version: 0.8.1+14
+version: 0.8.2+15
 environment:
   sdk: '>=3.3.0 <4.0.0'
 

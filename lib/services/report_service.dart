@@ -80,25 +80,21 @@ class ReportService {
       }
     }
 
-    // Wszystkie zdjęcia, które nie zmieściły się w głównej tabeli,
-    // trafiają na kolejne strony. Dzięki temu nic nie znika z raportu.
+    // Pełna dokumentacja zdjęciowa na końcu raportu.
+    // Każda miniatura z tabeli prowadzi do dużego zdjęcia na osobnej stronie.
     for (final defect in defects) {
       final ordered = _orderedPhotos(
         photos[defect.id] ?? const <AuditPhoto>[],
       );
-      if (ordered.length <= _mainPhotosPerDefect) continue;
 
-      final remaining = ordered.sublist(_mainPhotosPerDefect);
-      const perPage = 9;
-      for (var start = 0; start < remaining.length; start += perPage) {
-        final end = (start + perPage).clamp(0, remaining.length);
-        final page = await _renderPhotoContinuation(
-          defect,
-          remaining.sublist(start, end),
-          firstNumber: _mainPhotosPerDefect + start + 1,
-          total: ordered.length,
+      for (var i = 0; i < ordered.length; i++) {
+        await _addLargePhotoPage(
+          pdf,
+          defect: defect,
+          photo: ordered[i],
+          photoNumber: i + 1,
+          totalPhotos: ordered.length,
         );
-        await _addCompositePage(pdf, page);
       }
     }
 
@@ -147,7 +143,13 @@ class ReportService {
     for (final overlay in page.overlays) {
       try {
         final bytes = await _preparePdfPhoto(overlay.path);
-        overlays.add(_PdfOverlay(rect: overlay.rect, bytes: bytes));
+        overlays.add(
+          _PdfOverlay(
+            rect: overlay.rect,
+            bytes: bytes,
+            destination: overlay.destination,
+          ),
+        );
       } catch (_) {
         // Uszkodzone lub usunięte zdjęcie nie blokuje całego raportu.
       }
@@ -169,6 +171,16 @@ class ReportService {
                   fit: pw.BoxFit.fill,
                 ),
               ),
+              ...page.anchors.map(
+                (anchor) => pw.Positioned(
+                  left: anchor.x * sx,
+                  top: anchor.y * sy,
+                  child: pw.Anchor(
+                    name: anchor.name,
+                    child: pw.SizedBox(width: 1, height: 1),
+                  ),
+                ),
+              ),
               ...overlays.map(
                 (overlay) => pw.Positioned(
                   left: overlay.rect.left * sx,
@@ -177,11 +189,14 @@ class ReportService {
                       ((overlay.rect.left + overlay.rect.width) * sx),
                   bottom: PdfPageFormat.a4.height -
                       ((overlay.rect.top + overlay.rect.height) * sy),
-                  child: pw.Container(
-                    alignment: pw.Alignment.center,
-                    child: pw.Image(
-                      pw.MemoryImage(overlay.bytes),
-                      fit: pw.BoxFit.contain,
+                  child: pw.Link(
+                    destination: overlay.destination,
+                    child: pw.Container(
+                      alignment: pw.Alignment.center,
+                      child: pw.Image(
+                        pw.MemoryImage(overlay.bytes),
+                        fit: pw.BoxFit.contain,
+                      ),
                     ),
                   ),
                 ),
@@ -270,6 +285,7 @@ class ReportService {
     final availableH = _h - tableTop - headerH - 78;
     final rowH = availableH / _defectsPerPage;
     final overlays = <_PhotoOverlay>[];
+    final anchors = <_PageAnchor>[];
 
     for (var row = 0; row < _defectsPerPage; row++) {
       final rowTop = tableTop + headerH + row * rowH;
@@ -303,6 +319,14 @@ class ReportService {
       if (row >= defects.length) continue;
 
       final defect = defects[row];
+      anchors.add(
+        _PageAnchor(
+          name: _defectAnchor(defect),
+          x: _m + lpW,
+          y: rowTop + 4,
+        ),
+      );
+
       final ordered = _orderedPhotos(
         photos[defect.id] ?? const <AuditPhoto>[],
       );
@@ -404,6 +428,7 @@ class ReportService {
             _PhotoOverlay(
               path: visible[i].path,
               rect: imageRect.deflate(2),
+              destination: _photoAnchor(defect, i),
             ),
           );
           _text(
@@ -438,114 +463,162 @@ class ReportService {
       }
     }
 
-    _footer(canvas, 'Strona $pageNo z $pageCount • Audytor 0.8.1');
+    _footer(
+      canvas,
+      'Strona $pageNo z $pageCount • kliknij miniaturę, aby otworzyć duże zdjęcie',
+    );
 
     return _RenderedPage(
       background: await _pictureToJpeg(recorder, quality: 82),
       overlays: overlays,
+      anchors: anchors,
     );
   }
 
-  static Future<_RenderedPage> _renderPhotoContinuation(
-    Defect defect,
-    List<AuditPhoto> photos, {
-    required int firstNumber,
-    required int total,
+  static Future<void> _addLargePhotoPage(
+    pw.Document pdf, {
+    required Defect defect,
+    required AuditPhoto photo,
+    required int photoNumber,
+    required int totalPhotos,
   }) async {
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder, const Rect.fromLTWH(0, 0, _w, _h));
-    _background(canvas);
-
-    canvas.drawRect(
-      const Rect.fromLTWH(0, 0, _w, 100),
-      Paint()..color = const Color(0xFF17283A),
-    );
-    _text(
-      canvas,
-      'Dokumentacja zdjęciowa • pozycja ${defect.positionNo}',
-      const Rect.fromLTWH(_m, 28, _w - 2 * _m, 44),
-      size: 27,
-      weight: FontWeight.w700,
-      color: Colors.white,
-    );
-
-    _text(
-      canvas,
-      defect.description,
-      const Rect.fromLTWH(_m, 118, _w - 2 * _m, 62),
-      size: 15,
-      color: const Color(0xFF24364A),
-      maxLines: 2,
-    );
-
-    const top = 195.0;
-    const gapX = 18.0;
-    const gapY = 22.0;
-    final availableW = _w - 2 * _m;
-    final cellW = (availableW - 2 * gapX) / 3;
-    final availableH = _h - top - 88;
-    final cellH = (availableH - 2 * gapY) / 3;
-    const labelH = 28.0;
-    final overlays = <_PhotoOverlay>[];
-
-    for (var i = 0; i < photos.length; i++) {
-      final col = i % 3;
-      final row = i ~/ 3;
-      final box = Rect.fromLTWH(
-        _m + col * (cellW + gapX),
-        top + row * (cellH + gapY),
-        cellW,
-        cellH,
+    Uint8List bytes;
+    try {
+      bytes = await _preparePdfPhoto(
+        photo.path,
+        maxDimension: 2200,
+        quality: 90,
       );
-      final imageRect = Rect.fromLTWH(
-        box.left,
-        box.top,
-        box.width,
-        box.height - labelH,
-      );
-
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(imageRect, const Radius.circular(6)),
-        Paint()..color = const Color(0xFFF0F2F4),
-      );
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(imageRect, const Radius.circular(6)),
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1
-          ..color = const Color(0xFFD0D7DE),
-      );
-
-      overlays.add(
-        _PhotoOverlay(
-          path: photos[i].path,
-          rect: imageRect.deflate(4),
-        ),
-      );
-
-      _text(
-        canvas,
-        '${firstNumber + i}/$total • ${_photoLabel(photos[i])}',
-        Rect.fromLTWH(
-          box.left + 4,
-          box.bottom - labelH + 5,
-          box.width - 8,
-          labelH - 6,
-        ),
-        size: 11,
-        weight: FontWeight.w600,
-        color: const Color(0xFF4B5F73),
-        align: TextAlign.center,
-        maxLines: 1,
-      );
+    } catch (_) {
+      return;
     }
 
-    _footer(canvas, 'Wszystkie zdjęcia zachowują oryginalne proporcje');
+    final photoAnchor = _photoAnchor(defect, photoNumber - 1);
+    final defectAnchor = _defectAnchor(defect);
 
-    return _RenderedPage(
-      background: await _pictureToJpeg(recorder, quality: 82),
-      overlays: overlays,
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.fromLTRB(30, 30, 30, 28),
+        build: (_) => pw.Anchor(
+          name: photoAnchor,
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+            children: [
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Expanded(
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(
+                          'Dokumentacja zdjęciowa',
+                          style: pw.TextStyle(
+                            fontSize: 21,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.grey900,
+                          ),
+                        ),
+                        pw.SizedBox(height: 5),
+                        pw.Text(
+                          'Pozycja ${defect.positionNo} • ${_photoLabel(photo)}',
+                          style: const pw.TextStyle(
+                            fontSize: 12,
+                            color: PdfColors.grey700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  pw.Text(
+                    '$photoNumber / $totalPhotos',
+                    style: const pw.TextStyle(
+                      fontSize: 11,
+                      color: PdfColors.grey700,
+                    ),
+                  ),
+                ],
+              ),
+              pw.SizedBox(height: 10),
+              pw.Container(
+                padding: const pw.EdgeInsets.all(8),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.grey100,
+                  border: pw.Border.all(
+                    color: PdfColors.grey400,
+                    width: 0.7,
+                  ),
+                ),
+                height: PdfPageFormat.a4.height - 170,
+                alignment: pw.Alignment.center,
+                child: pw.Image(
+                  pw.MemoryImage(bytes),
+                  fit: pw.BoxFit.contain,
+                ),
+              ),
+              pw.SizedBox(height: 9),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Expanded(
+                    child: pw.Text(
+                      defect.description,
+                      maxLines: 2,
+                      style: const pw.TextStyle(
+                        fontSize: 9,
+                        color: PdfColors.grey700,
+                      ),
+                    ),
+                  ),
+                  pw.SizedBox(width: 12),
+                  pw.Link(
+                    destination: defectAnchor,
+                    child: pw.Container(
+                      padding: const pw.EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: pw.BoxDecoration(
+                        color: PdfColors.grey100,
+                        border: pw.Border.all(
+                          color: PdfColors.grey400,
+                          width: 0.6,
+                        ),
+                      ),
+                      child: pw.Text(
+                        'Powrót do usterki',
+                        style: pw.TextStyle(
+                          fontSize: 9,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.blue800,
+                          decoration: pw.TextDecoration.underline,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
+  }
+
+  static String _defectAnchor(Defect defect) {
+    final key = defect.id != null
+        ? 'id${defect.id}'
+        : 'pos_${_safe(defect.positionNo)}';
+    return 'defect_$key';
+  }
+
+  static String _photoAnchor(Defect defect, int index) {
+    final key = defect.id != null
+        ? 'id${defect.id}'
+        : 'pos_${_safe(defect.positionNo)}';
+    return 'photo_${key}_${index + 1}';
   }
 
   static List<AuditPhoto> _orderedPhotos(List<AuditPhoto> photos) {
@@ -576,6 +649,7 @@ class ReportService {
   static Future<Uint8List> _preparePdfPhoto(
     String path, {
     int maxDimension = 1400,
+    int quality = 82,
   }) async {
     final raw = await File(path).readAsBytes();
     final decoded = img.decodeImage(raw);
@@ -603,7 +677,7 @@ class ReportService {
     }
 
     return Uint8List.fromList(
-      img.encodeJpg(working, quality: 82),
+      img.encodeJpg(working, quality: quality),
     );
   }
 
@@ -724,29 +798,47 @@ class ReportService {
 class _RenderedPage {
   final Uint8List background;
   final List<_PhotoOverlay> overlays;
+  final List<_PageAnchor> anchors;
 
   const _RenderedPage({
     required this.background,
     required this.overlays,
+    this.anchors = const <_PageAnchor>[],
   });
 }
 
 class _PhotoOverlay {
   final String path;
   final Rect rect;
+  final String destination;
 
   const _PhotoOverlay({
     required this.path,
     required this.rect,
+    required this.destination,
+  });
+}
+
+class _PageAnchor {
+  final String name;
+  final double x;
+  final double y;
+
+  const _PageAnchor({
+    required this.name,
+    required this.x,
+    required this.y,
   });
 }
 
 class _PdfOverlay {
   final Rect rect;
   final Uint8List bytes;
+  final String destination;
 
   const _PdfOverlay({
     required this.rect,
     required this.bytes,
+    required this.destination,
   });
 }
