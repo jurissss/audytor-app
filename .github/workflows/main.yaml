@@ -39,6 +39,11 @@ jobs:
               .
           fi
 
+      - name: Remove generated default test
+        shell: bash
+        run: |
+          rm -f test/widget_test.dart
+
       - name: Install dependencies
         run: flutter pub get
 
@@ -51,7 +56,12 @@ jobs:
       - name: Verify APK
         shell: bash
         run: |
+          echo "=============================="
+          echo "APK RESULT"
+          echo "=============================="
+
           ls -lh build/app/outputs/flutter-apk/
+
           test -f build/app/outputs/flutter-apk/app-release.apk
 
       - name: Upload APK
