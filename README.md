@@ -1,6 +1,6 @@
 # Audytor
 
-Wersja **0.8.9+22**.
+Wersja **0.9.0+23**.
 
 ## Najważniejsze zmiany
 
@@ -41,3 +41,8 @@ Wersja **0.8.9+22**.
 - podczas edycji pokazuje „Zapisz zmiany”,
 - nie trzeba przewijać formularza na sam dół,
 - dolna część formularza ma dodatkowy margines, żeby przycisk nie zasłaniał pól.
+
+## 0.9.0+23 – bardziej kompaktowa edycja usterki
+- pole „Opis usterki” zmniejszone mniej więcej o połowę,
+- pole „Zalecenie / sposób naprawy” przemianowane na „Uwagi”,
+- „Uwagi” ograniczone do jednej linii.

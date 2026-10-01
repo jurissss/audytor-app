@@ -1,11 +1,11 @@
-AUDYTOR 0.8.9+22 - WGRANIE PRZEZ GITHUB DESKTOP
+AUDYTOR 0.9.0+23 - WGRANIE PRZEZ GITHUB DESKTOP
 
 1. Otwórz repo audytor-app w GitHub Desktop.
 2. Repository -> Show in Explorer.
 3. Usuń stare pliki repozytorium, ale NIE usuwaj ukrytego folderu .git.
 4. Rozpakuj tę paczkę i skopiuj całą jej zawartość do folderu repo.
 5. Wróć do GitHub Desktop.
-6. Summary: Audytor 0.8.9+22 poprawka uwag w PDF.
+6. Summary: Audytor 0.9.0+23 poprawka uwag w PDF.
 7. Commit to main.
 8. Push origin.
 9. Poczekaj na zakończenie GitHub Actions.
