@@ -1,14 +1,11 @@
-AUDYTOR 0.8.0+12 - WGRANIE PEŁNEGO REPO
+AUDYTOR 0.8.1+13 - WGRANIE PRZEZ GITHUB DESKTOP
 
-1. Otwórz sklonowane repozytorium audytor-app w Eksploratorze Windows.
-2. Usuń starą zawartość repozytorium, ale NIE usuwaj ukrytego folderu .git.
-3. Rozpakuj tę paczkę i skopiuj CAŁĄ jej zawartość do folderu repozytorium.
-4. Sprawdź, czy istnieje:
-   .github/workflows/main.yaml
-   lib/main.dart
-   lib/screens/photo_viewer_screen.dart
-   pubspec.yaml
-5. W GitHub Desktop wpisz Summary: Audytor 0.8.0 full repo
-6. Kliknij Commit to main.
-7. Kliknij Push origin.
-8. GitHub Actions automatycznie uruchomi budowę APK.
+1. Otwórz repo audytor-app w GitHub Desktop.
+2. Repository -> Show in Explorer.
+3. Usuń stare pliki repozytorium, ale NIE usuwaj ukrytego folderu .git.
+4. Rozpakuj tę paczkę i skopiuj całą jej zawartość do folderu repo.
+5. Wróć do GitHub Desktop.
+6. Summary: Audytor 0.8.1 raport PDF.
+7. Commit to main.
+8. Push origin.
+9. Poczekaj na zakończenie GitHub Actions.
