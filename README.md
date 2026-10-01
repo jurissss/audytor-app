@@ -1,6 +1,6 @@
 # Audytor
 
-Wersja 0.8.2+15.
+Wersja 0.8.3+16.
 
 Najważniejsze funkcje:
 - wyszukiwarka obiektów na ekranie głównym,
@@ -29,3 +29,14 @@ Poprawka build #41:
 - każde zdjęcie ma osobną stronę A4 i wysoką rozdzielczość do powiększania,
 - na stronie dużego zdjęcia jest link „Powrót do usterki”,
 - dokumentacja działa bez internetu i bez Google Drive.
+
+
+## 0.8.3+16 – dynamiczne dzielenie dużych raportów
+- limit jednej części PDF: 23 MB,
+- podział zawsze na granicy całej usterki,
+- każda część ma tabelę z miniaturami oraz duże zdjęcia swoich usterek,
+- zdjęcia duże są dynamicznie kompresowane do ok. 250 kB,
+- miniatury są kompresowane do ok. 48 kB,
+- rzeczywisty rozmiar PDF jest sprawdzany po wygenerowaniu,
+- gdy część przekracza limit, ostatnia usterka przechodzi do następnego PDF,
+- przy kilku częściach aplikacja pozwala udostępnić wszystkie PDF-y jednocześnie.

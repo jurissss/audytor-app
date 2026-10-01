@@ -28,20 +28,148 @@ class ReportResult {
   });
 }
 
+class ReportBatchResult {
+  final List<ReportResult> parts;
+  final int limitBytes;
+
+  const ReportBatchResult({
+    required this.parts,
+    required this.limitBytes,
+  });
+
+  bool get isSplit => parts.length > 1;
+
+  int get totalBytes =>
+      parts.fold<int>(0, (sum, part) => sum + part.bytes.length);
+
+  double get totalMb => totalBytes / 1024 / 1024;
+}
+
 class ReportService {
   static const double _w = 1240;
   static const double _h = 1754;
   static const double _m = 42;
   static const int _defectsPerPage = 4;
   static const int _mainPhotosPerDefect = 6;
+  static const int _pdfLimitBytes = 23 * 1024 * 1024;
+  static const int _largePhotoTargetBytes = 250 * 1024;
+  static const int _thumbnailTargetBytes = 48 * 1024;
   static final DateFormat _dateTime = DateFormat('dd.MM.yyyy HH:mm');
 
-  static Future<ReportResult> generate({
+  static Future<ReportBatchResult> generate({
     required Site site,
     required Audit audit,
     required List<Defect> defects,
     required Map<int, List<AuditPhoto>> photos,
     String? galleryHref,
+  }) async {
+    final docs = await getApplicationDocumentsDirectory();
+    final dir = Directory(p.join(docs.path, 'reports'));
+    if (!await dir.exists()) await dir.create(recursive: true);
+
+    // Najpierw dobieramy kandydatów na podstawie rozmiaru zdjęć,
+    // a następnie sprawdzamy RZECZYWISTY rozmiar wygenerowanego PDF.
+    // Granica usterki nigdy nie jest rozcinana pomiędzy dwa pliki.
+    final chunks = <List<Defect>>[];
+
+    if (defects.isEmpty) {
+      chunks.add(const <Defect>[]);
+    } else {
+      var index = 0;
+
+      while (index < defects.length) {
+        var end = index;
+        var estimated = 320 * 1024; // tekst, tabela, struktura PDF
+
+        while (end < defects.length) {
+          final next = await _estimateDefectBytes(
+            defects[end],
+            photos[defects[end].id] ?? const <AuditPhoto>[],
+          );
+
+          // Celujemy poniżej 23 MB, aby ograniczyć liczbę ponownych renderów.
+          if (end > index && estimated + next > 21 * 1024 * 1024) {
+            break;
+          }
+
+          estimated += next;
+          end++;
+        }
+
+        if (end == index) end++;
+
+        var candidate = defects.sublist(index, end);
+        var bytes = await _buildPdfBytes(
+          site: site,
+          audit: audit,
+          defects: candidate,
+          photos: photos,
+          globalStartIndex: index,
+        );
+
+        // Dynamiczna kontrola RZECZYWISTEGO rozmiaru.
+        while (bytes.length > _pdfLimitBytes && candidate.length > 1) {
+          end--;
+          candidate = defects.sublist(index, end);
+          bytes = await _buildPdfBytes(
+            site: site,
+            audit: audit,
+            defects: candidate,
+            photos: photos,
+            globalStartIndex: index,
+          );
+        }
+
+        chunks.add(candidate);
+        index = end;
+      }
+    }
+
+    final parts = <ReportResult>[];
+    final stamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+    final auditStamp = DateFormat('yyyyMMdd_HHmm').format(audit.startedAt);
+    final baseName = 'Audyt_${_safe(site.name)}_${auditStamp}_aktualny';
+
+    for (var i = 0; i < chunks.length; i++) {
+      final bytes = await _buildPdfBytes(
+        site: site,
+        audit: audit,
+        defects: chunks[i],
+        photos: photos,
+        globalStartIndex: defects.isEmpty
+            ? 0
+            : defects.indexOf(chunks[i].first),
+      );
+
+      final suffix = chunks.length == 1
+          ? ''
+          : '_czesc_${(i + 1).toString().padLeft(2, '0')}';
+
+      final filename = '${baseName}${suffix}_$stamp.pdf';
+      final file = File(p.join(dir.path, filename));
+      await file.writeAsBytes(bytes, flush: true);
+
+      parts.add(
+        ReportResult(
+          bytes: bytes,
+          path: file.path,
+          filename: filename,
+        ),
+      );
+    }
+
+    return ReportBatchResult(
+      parts: parts,
+      limitBytes: _pdfLimitBytes,
+    );
+  }
+
+  static Future<Uint8List> _buildPdfBytes({
+    required Site site,
+    required Audit audit,
+    required List<Defect> defects,
+    required Map<int, List<AuditPhoto>> photos,
+    required int globalStartIndex,
   }) async {
     final pdf = pw.Document();
 
@@ -55,7 +183,7 @@ class ReportService {
         audit,
         const <Defect>[],
         photos,
-        startIndex: 0,
+        startIndex: globalStartIndex,
         pageNo: 1,
         pageCount: 1,
         totalDefects: 0,
@@ -71,7 +199,7 @@ class ReportService {
           audit,
           defects.sublist(start, end),
           photos,
-          startIndex: start,
+          startIndex: globalStartIndex + start,
           pageNo: (start ~/ _defectsPerPage) + 1,
           pageCount: pageCount,
           totalDefects: defects.length,
@@ -80,8 +208,7 @@ class ReportService {
       }
     }
 
-    // Pełna dokumentacja zdjęciowa na końcu raportu.
-    // Każda miniatura z tabeli prowadzi do dużego zdjęcia na osobnej stronie.
+    // Duże zdjęcia znajdują się na końcu TEJ SAMEJ części PDF.
     for (final defect in defects) {
       final ordered = _orderedPhotos(
         photos[defect.id] ?? const <AuditPhoto>[],
@@ -98,26 +225,32 @@ class ReportService {
       }
     }
 
-    if (galleryHref != null && galleryHref.trim().isNotEmpty) {
-      // Celowo nie dodajemy lokalnych linków do plików z ZIP-a.
-      // Na Androidzie były one zawodne. Wszystkie zdjęcia są już w PDF.
+    return pdf.save();
+  }
+
+  static Future<int> _estimateDefectBytes(
+    Defect defect,
+    List<AuditPhoto> photos,
+  ) async {
+    var bytes = 110 * 1024; // tekst i udział w tabeli
+    final ordered = _orderedPhotos(photos);
+
+    for (final photo in ordered) {
+      try {
+        final source = await File(photo.path).length();
+        final large = source < _largePhotoTargetBytes
+            ? source
+            : _largePhotoTargetBytes;
+        final thumb = source < _thumbnailTargetBytes
+            ? source
+            : _thumbnailTargetBytes;
+        bytes += large + thumb + 10 * 1024;
+      } catch (_) {
+        bytes += 40 * 1024;
+      }
     }
 
-    final bytes = await pdf.save();
-    final docs = await getApplicationDocumentsDirectory();
-    final dir = Directory(p.join(docs.path, 'reports'));
-    if (!await dir.exists()) await dir.create(recursive: true);
-
-    final filename =
-        'Audyt_${_safe(site.name)}_${DateFormat('yyyyMMdd_HHmm').format(audit.startedAt)}_aktualny_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.pdf';
-    final file = File(p.join(dir.path, filename));
-    await file.writeAsBytes(bytes, flush: true);
-
-    return ReportResult(
-      bytes: bytes,
-      path: file.path,
-      filename: filename,
-    );
+    return bytes;
   }
 
   static Future<void> share(ReportResult report) {
@@ -142,7 +275,11 @@ class ReportService {
 
     for (final overlay in page.overlays) {
       try {
-        final bytes = await _preparePdfPhoto(overlay.path);
+        final bytes = await _preparePdfPhoto(
+          overlay.path,
+          maxDimension: 900,
+          targetBytes: _thumbnailTargetBytes,
+        );
         overlays.add(
           _PdfOverlay(
             rect: overlay.rect,
@@ -486,8 +623,8 @@ class ReportService {
     try {
       bytes = await _preparePdfPhoto(
         photo.path,
-        maxDimension: 2200,
-        quality: 90,
+        maxDimension: 1800,
+        targetBytes: _largePhotoTargetBytes,
       );
     } catch (_) {
       return;
@@ -648,37 +785,69 @@ class ReportService {
 
   static Future<Uint8List> _preparePdfPhoto(
     String path, {
-    int maxDimension = 1400,
-    int quality = 82,
+    int maxDimension = 1600,
+    int targetBytes = _largePhotoTargetBytes,
   }) async {
     final raw = await File(path).readAsBytes();
     final decoded = img.decodeImage(raw);
     if (decoded == null) return raw;
 
-    var working = img.bakeOrientation(decoded);
-    final longest = working.width > working.height
-        ? working.width
-        : working.height;
+    var source = img.bakeOrientation(decoded);
+    Uint8List? smallest;
 
-    if (longest > maxDimension) {
-      if (working.width >= working.height) {
-        working = img.copyResize(
-          working,
-          width: maxDimension,
-          interpolation: img.Interpolation.average,
+    final dimensions = <int>[
+      maxDimension,
+      1600,
+      1450,
+      1300,
+      1150,
+      1000,
+      900,
+      800,
+      700,
+    ].where((value) => value <= maxDimension).toSet().toList()
+      ..sort((a, b) => b.compareTo(a));
+
+    if (dimensions.isEmpty) dimensions.add(maxDimension);
+
+    for (final dimension in dimensions) {
+      var working = source;
+      final longest = working.width > working.height
+          ? working.width
+          : working.height;
+
+      if (longest > dimension) {
+        if (working.width >= working.height) {
+          working = img.copyResize(
+            working,
+            width: dimension,
+            interpolation: img.Interpolation.average,
+          );
+        } else {
+          working = img.copyResize(
+            working,
+            height: dimension,
+            interpolation: img.Interpolation.average,
+          );
+        }
+      }
+
+      for (final quality in const <int>[82, 76, 70, 64, 58, 52, 46, 40]) {
+        final encoded = Uint8List.fromList(
+          img.encodeJpg(working, quality: quality),
         );
-      } else {
-        working = img.copyResize(
-          working,
-          height: maxDimension,
-          interpolation: img.Interpolation.average,
-        );
+
+        if (smallest == null || encoded.length < smallest.length) {
+          smallest = encoded;
+        }
+
+        if (encoded.length <= targetBytes) {
+          return encoded;
+        }
       }
     }
 
-    return Uint8List.fromList(
-      img.encodeJpg(working, quality: quality),
-    );
+    return smallest ?? raw;
   }
 
   static double _metaLine(

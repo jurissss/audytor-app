@@ -117,7 +117,7 @@ class AuditPackageService {
 
     final archive = Archive();
 
-    final report = await ReportService.generate(
+    final reportBatch = await ReportService.generate(
       site: site,
       audit: audit,
       defects: defects,
@@ -125,13 +125,20 @@ class AuditPackageService {
       galleryHref: 'ZDJECIA.html',
     );
 
-    archive.addFile(
-      ArchiveFile(
-        'RAPORT_AUDYTU.pdf',
-        report.bytes.length,
-        report.bytes,
-      ),
-    );
+    for (var i = 0; i < reportBatch.parts.length; i++) {
+      final report = reportBatch.parts[i];
+      final name = reportBatch.parts.length == 1
+          ? 'RAPORT_AUDYTU.pdf'
+          : 'RAPORT_AUDYTU_CZESC_${(i + 1).toString().padLeft(2, '0')}.pdf';
+
+      archive.addFile(
+        ArchiveFile(
+          name,
+          report.bytes.length,
+          report.bytes,
+        ),
+      );
+    }
 
     final valid = <_SourcePhoto>[];
 

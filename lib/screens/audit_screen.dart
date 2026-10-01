@@ -271,7 +271,7 @@ class _AuditScreenState extends State<AuditScreen> {
     setState(() => _generating = true);
 
     try {
-      final report = await ReportService.generate(
+      final reportBatch = await ReportService.generate(
         site: widget.site,
         audit: _audit,
         defects: _defects,
@@ -295,7 +295,9 @@ class _AuditScreenState extends State<AuditScreen> {
                   CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  'Aktualny raport PDF gotowy',
+                  reportBatch.isSplit
+                      ? 'Raport podzielony na ${reportBatch.parts.length} części'
+                      : 'Aktualny raport PDF gotowy',
                   style: Theme.of(context)
                       .textTheme
                       .titleLarge
@@ -304,30 +306,63 @@ class _AuditScreenState extends State<AuditScreen> {
                       ),
                 ),
                 const SizedBox(height: 8),
-                const Text(
-                  'Raport został utworzony na podstawie bieżącego stanu audytu, w tym potwierdzonych napraw.',
+                Text(
+                  reportBatch.isSplit
+                      ? 'Każda część zawiera listę usterek z miniaturami oraz duże zdjęcia tych samych usterek. Limit jednej części to około 23 MB.'
+                      : 'Raport został utworzony na podstawie bieżącego stanu audytu, w tym potwierdzonych napraw.',
                 ),
                 const SizedBox(height: 8),
-                Text(report.filename),
+                Text(
+                  reportBatch.parts
+                      .map((part) =>
+                          '${part.filename} • ${(part.bytes.length / 1024 / 1024).toStringAsFixed(1)} MB')
+                      .join('\n'),
+                ),
                 const SizedBox(height: 18),
                 FilledButton.icon(
-                  onPressed: () =>
-                      ReportService.share(report),
-                  icon:
-                      const Icon(Icons.share_outlined),
-                  label:
-                      const Text('Udostępnij PDF'),
-                ),
-                const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  onPressed: () =>
-                      ReportService.printReport(report),
-                  icon:
-                      const Icon(Icons.print_outlined),
-                  label: const Text(
-                    'Drukuj / zapisz jako PDF',
+                  onPressed: () async {
+                    await Share.shareXFiles(
+                      reportBatch.parts
+                          .map((part) => XFile(part.path))
+                          .toList(),
+                      subject: 'Raport audytu ${widget.site.name}',
+                      text: reportBatch.isSplit
+                          ? 'Raport audytu podzielony na ${reportBatch.parts.length} części.'
+                          : 'Raport audytu.',
+                    );
+                  },
+                  icon: const Icon(Icons.share_outlined),
+                  label: Text(
+                    reportBatch.isSplit
+                        ? 'Udostępnij wszystkie części'
+                        : 'Udostępnij PDF',
                   ),
                 ),
+                const SizedBox(height: 8),
+                if (reportBatch.parts.length == 1)
+                  OutlinedButton.icon(
+                    onPressed: () =>
+                        ReportService.printReport(reportBatch.parts.first),
+                    icon: const Icon(Icons.print_outlined),
+                    label: const Text(
+                      'Drukuj / zapisz jako PDF',
+                    ),
+                  )
+                else
+                  ...reportBatch.parts.asMap().entries.map(
+                    (entry) => Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: OutlinedButton.icon(
+                        onPressed: () => ReportService.printReport(
+                          entry.value,
+                        ),
+                        icon: const Icon(Icons.print_outlined),
+                        label: Text(
+                          'Drukuj część ${entry.key + 1}',
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
