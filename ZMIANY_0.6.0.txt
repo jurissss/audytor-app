@@ -1,0 +1,8 @@
+Audytor 0.6.0
+- „Wyślij do reaudytu”.
+- „Importuj audyt / reaudyt”.
+- Eksport/import pojedynczego audytu.
+- Kompresja zdjęć do wysyłki.
+- Aktualny PDF w paczce.
+- ZDJECIA.html z odnośnikami do zdjęć.
+- Ponowne generowanie PDF po potwierdzeniu usunięcia usterek.
