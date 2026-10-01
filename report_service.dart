@@ -20,19 +20,14 @@ class ReportResult {
   final Uint8List bytes;
   final String path;
   final String filename;
-
-  const ReportResult({
-    required this.bytes,
-    required this.path,
-    required this.filename,
-  });
+  const ReportResult({required this.bytes, required this.path, required this.filename});
 }
 
 class ReportService {
   static const double _w = 1240;
   static const double _h = 1754;
-  static const double _m = 82;
-
+  static const double _m = 58;
+  static const int _defectsPerPage = 6;
   static final DateFormat _dateTime = DateFormat('dd.MM.yyyy HH:mm');
 
   static Future<ReportResult> generate({
@@ -42,645 +37,252 @@ class ReportService {
     required Map<int, List<AuditPhoto>> photos,
   }) async {
     final pdf = pw.Document();
+    _addRasterPage(pdf, await _renderCover(site, audit, defects));
 
-    final cover = await _renderCover(site, audit, defects);
-    _addRasterPage(pdf, cover);
-
-    // Raport zbiorczy: 6 usterek na stronie (2 kolumny x 3 wiersze).
-    // Do każdej usterki trafia tylko pierwsza miniatura zdjęcia z audytu.
-    // Pełniejsze, skompresowane zdjęcia pozostają w paczce audytu.
-    const defectsPerPage = 6;
-    for (var start = 0; start < defects.length; start += defectsPerPage) {
-      final end = (start + defectsPerPage).clamp(0, defects.length).toInt();
+    // KLUCZOWA ZMIANA: grupujemy USTERKI po 6, a nie zdjęcia jednej usterki.
+    for (var start = 0; start < defects.length; start += _defectsPerPage) {
+      final end = (start + _defectsPerPage).clamp(0, defects.length);
       final batch = defects.sublist(start, end);
-      final page = await _renderDefectsGridPage(batch, photos);
-      final links = <_PageLink>[];
-      for (var i = 0; i < batch.length; i++) {
-        final defect = batch[i];
-        links.add(_PageLink(
-          rect: _defectCardRect(i),
-          destination: 'ZDJECIA.html#usterka-${defect.id ?? defect.positionNo}',
-        ));
-      }
-      _addRasterPage(pdf, page, links: links);
+      _addRasterPage(pdf, await _renderDefectsGrid(batch, photos));
     }
 
     final bytes = await pdf.save();
     final docs = await getApplicationDocumentsDirectory();
     final reports = Directory(p.join(docs.path, 'reports'));
     if (!await reports.exists()) await reports.create(recursive: true);
-
     final safeSite = _safe(site.name);
     final auditStamp = DateFormat('yyyyMMdd_HHmm').format(audit.startedAt);
     final generatedStamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
     final filename = 'Audyt_${safeSite}_${auditStamp}_aktualny_$generatedStamp.pdf';
     final file = File(p.join(reports.path, filename));
     await file.writeAsBytes(bytes, flush: true);
-
     return ReportResult(bytes: bytes, path: file.path, filename: filename);
   }
 
-  static Future<void> share(ReportResult report) async {
-    await Printing.sharePdf(bytes: report.bytes, filename: report.filename);
-  }
+  static Future<void> share(ReportResult report) async =>
+      Printing.sharePdf(bytes: report.bytes, filename: report.filename);
 
-  static Future<void> printReport(ReportResult report) async {
-    await Printing.layoutPdf(
-      name: report.filename,
-      onLayout: (_) async => report.bytes,
-    );
-  }
+  static Future<void> printReport(ReportResult report) async =>
+      Printing.layoutPdf(name: report.filename, onLayout: (_) async => report.bytes);
 
-  static void _addRasterPage(
-    pw.Document pdf,
-    Uint8List pageImage, {
-    List<_PageLink> links = const <_PageLink>[],
-  }) {
-    final image = pw.MemoryImage(pageImage);
-    final sx = PdfPageFormat.a4.width / _w;
-    final sy = PdfPageFormat.a4.height / _h;
-    pdf.addPage(
-      pw.Page(
-        pageFormat: PdfPageFormat.a4,
-        margin: pw.EdgeInsets.zero,
-        build: (_) => pw.Stack(
-          children: [
-            pw.Positioned.fill(child: pw.Image(image, fit: pw.BoxFit.fill)),
-            ...links.map((link) => pw.Positioned(
-                  left: link.rect.left * sx,
-                  top: link.rect.top * sy,
-                  width: link.rect.width * sx,
-                  height: link.rect.height * sy,
-                  child: pw.UrlLink(
-                    destination: link.destination,
-                    child: pw.Container(),
-                  ),
-                )),
-          ],
-        ),
+  static void _addRasterPage(pw.Document pdf, Uint8List pageImage) {
+    pdf.addPage(pw.Page(
+      pageFormat: PdfPageFormat.a4,
+      margin: pw.EdgeInsets.zero,
+      build: (_) => pw.SizedBox.expand(
+        child: pw.Image(pw.MemoryImage(pageImage), fit: pw.BoxFit.fill),
       ),
-    );
+    ));
   }
 
-  static Future<Uint8List> _renderCover(
-    Site site,
-    Audit audit,
-    List<Defect> defects,
-  ) async {
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder, const Rect.fromLTWH(0, 0, _w, _h));
-    _paintBackground(canvas);
-
-    canvas.drawRect(
-      const Rect.fromLTWH(0, 0, _w, 250),
-      Paint()..color = const Color(0xFF16324F),
-    );
-
-    _text(
-      canvas,
-      'RAPORT Z AUDYTU',
-      const Rect.fromLTWH(_m, 82, _w - 2 * _m, 75),
-      size: 52,
-      weight: FontWeight.w700,
-      color: Colors.white,
-    );
-    _text(
-      canvas,
-      audit.auditType,
-      const Rect.fromLTWH(_m, 164, _w - 2 * _m, 48),
-      size: 26,
-      color: const Color(0xFFD9E7F5),
-    );
-
-    var y = 340.0;
-    y = _labelValue(canvas, y, 'OBIEKT', site.name);
-    if (site.code.trim().isNotEmpty) {
-      y = _labelValue(canvas, y, 'NR / KOD OBIEKTU', site.code);
-    }
-    if (site.address.trim().isNotEmpty) {
-      y = _labelValue(canvas, y, 'ADRES', site.address);
-    }
-    y = _labelValue(canvas, y, 'DATA ROZPOCZĘCIA', _dateTime.format(audit.startedAt));
-    if (audit.completedAt != null) {
-      y = _labelValue(canvas, y, 'DATA ZAKOŃCZENIA', _dateTime.format(audit.completedAt!));
-    }
-    y = _labelValue(canvas, y, 'AUDYTOR', audit.auditor);
-    y = _labelValue(canvas, y, 'RAPORT WYGENEROWANO', _dateTime.format(DateTime.now()), compact: true);
-
-    y += 24;
-    _sectionTitle(canvas, y, 'PODSUMOWANIE');
-    y += 70;
-
-    final priorityCounts = <String, int>{};
-    for (final d in defects) {
-      priorityCounts[d.priority] = (priorityCounts[d.priority] ?? 0) + 1;
-    }
-    final resolvedCount = defects.where((d) => d.isResolved).length;
-    final openCount = defects.length - resolvedCount;
-
-    final boxes = <MapEntry<String, String>>[
-      MapEntry('Usterki', defects.length.toString()),
-      MapEntry('Usunięte', resolvedCount.toString()),
-      MapEntry('Do usunięcia', openCount.toString()),
-      MapEntry('Krytyczne', (priorityCounts['Krytyczny'] ?? 0).toString()),
-    ];
-    final boxGap = 22.0;
-    final boxW = (_w - 2 * _m - boxGap * 3) / 4;
-    for (var i = 0; i < boxes.length; i++) {
-      final x = _m + i * (boxW + boxGap);
-      final rect = Rect.fromLTWH(x, y, boxW, 150);
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(rect, const Radius.circular(18)),
-        Paint()..color = const Color(0xFFF0F4F8),
-      );
-      _text(canvas, boxes[i].value, Rect.fromLTWH(x + 18, y + 26, boxW - 36, 58),
-          size: 40, weight: FontWeight.w700, align: TextAlign.center);
-      _text(canvas, boxes[i].key, Rect.fromLTWH(x + 12, y + 93, boxW - 24, 38),
-          size: 20, color: const Color(0xFF526579), align: TextAlign.center);
-    }
-
-    y += 220;
-    if (audit.notes.trim().isNotEmpty) {
-      _sectionTitle(canvas, y, 'UWAGI DO AUDYTU');
-      y += 60;
-      _text(
-        canvas,
-        audit.notes,
-        Rect.fromLTWH(_m, y, _w - 2 * _m, 190),
-        size: 23,
-        color: const Color(0xFF24364A),
-        maxLines: 5,
-      );
-      y += 210;
-    }
-
-    _footer(canvas, 'Raport wygenerowany w aplikacji Audytor • zdjęcia pomniejszone dla mniejszego pliku PDF');
-    return _pictureToJpeg(recorder);
-  }
-
-  static Rect _defectCardRect(int index) {
-    const gapX = 24.0;
-    const gapY = 24.0;
-    const top = 210.0;
-    const bottom = 125.0;
-    final cardW = (_w - 2 * _m - gapX) / 2;
-    final cardH = (_h - top - bottom - 2 * gapY) / 3;
-    final col = index % 2;
-    final row = index ~/ 2;
-    return Rect.fromLTWH(
-      _m + col * (cardW + gapX),
-      top + row * (cardH + gapY),
-      cardW,
-      cardH,
-    );
-  }
-
-  static Future<Uint8List> _renderDefectsGridPage(
+  static Future<Uint8List> _renderDefectsGrid(
     List<Defect> defects,
     Map<int, List<AuditPhoto>> photos,
   ) async {
-    final thumbnails = <int, ui.Image?>{};
-    for (final defect in defects) {
-      final issue = (photos[defect.id] ?? const <AuditPhoto>[])
-          .where((p) => !p.isResolution)
-          .toList();
-      if (issue.isNotEmpty) {
-        try {
-          thumbnails[defect.id ?? -1] = await _loadImage(issue.first.path);
-        } catch (_) {
-          thumbnails[defect.id ?? -1] = null;
-        }
-      }
-    }
-
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder, const Rect.fromLTWH(0, 0, _w, _h));
     _paintBackground(canvas);
-    canvas.drawRect(
-      const Rect.fromLTWH(0, 0, _w, 165),
-      Paint()..color = const Color(0xFF16324F),
-    );
-    _text(canvas, 'USTERKI', const Rect.fromLTWH(_m, 48, 500, 60),
-        size: 42, weight: FontWeight.w700, color: Colors.white);
-    _text(
-      canvas,
-      'Kliknij kartę usterki, aby przejść do większych zdjęć w paczce',
-      const Rect.fromLTWH(420, 58, 730, 45),
-      size: 18,
-      color: const Color(0xFFD9E7F5),
-      align: TextAlign.right,
-    );
+
+    canvas.drawRect(const Rect.fromLTWH(0, 0, _w, 118),
+        Paint()..color = const Color(0xFF16324F));
+    _text(canvas, 'USTERKI', const Rect.fromLTWH(_m, 34, 600, 52),
+        size: 34, weight: FontWeight.w700, color: Colors.white);
+
+    const gapX = 22.0, gapY = 22.0;
+    final top = 148.0;
+    final bottom = _h - 92;
+    final cardW = (_w - 2 * _m - gapX) / 2;
+    final cardH = (bottom - top - gapY * 2) / 3;
 
     for (var i = 0; i < defects.length; i++) {
-      final defect = defects[i];
-      final rect = _defectCardRect(i);
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(rect, const Radius.circular(16)),
-        Paint()..color = const Color(0xFFF7F9FB),
-      );
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(rect, const Radius.circular(16)),
-        Paint()
-          ..color = const Color(0xFFDCE3EA)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2,
+      final d = defects[i];
+      final col = i % 2, row = i ~/ 2;
+      final rect = Rect.fromLTWH(
+        _m + col * (cardW + gapX),
+        top + row * (cardH + gapY),
+        cardW, cardH,
       );
 
-      final pad = 18.0;
-      final photoRect = Rect.fromLTWH(rect.left + pad, rect.top + 58, 180, 180);
-      final thumb = thumbnails[defect.id ?? -1];
-      if (thumb != null) {
-        _drawPhoto(canvas, thumb, photoRect);
-      } else {
-        canvas.drawRRect(
-          RRect.fromRectAndRadius(photoRect, const Radius.circular(12)),
-          Paint()..color = const Color(0xFFE9EDF1),
-        );
-        _text(canvas, 'BRAK\nZDJĘCIA', photoRect.deflate(15),
-            size: 18, color: const Color(0xFF7B8794), align: TextAlign.center, maxLines: 2);
-      }
+      ui.Image? issueImage;
+      ui.Image? resolutionImage;
+      final all = photos[d.id] ?? const <AuditPhoto>[];
+      final issue = all.where((x) => !x.isResolution).toList();
+      final resolution = all.where((x) => x.isResolution).toList();
+      try { if (issue.isNotEmpty) issueImage = await _loadThumbnail(issue.first.path); } catch (_) {}
+      try { if (resolution.isNotEmpty) resolutionImage = await _loadThumbnail(resolution.first.path); } catch (_) {}
 
-      _text(canvas, 'POZ. ${defect.positionNo}',
-          Rect.fromLTWH(rect.left + pad, rect.top + 15, rect.width - 190, 38),
-          size: 23, weight: FontWeight.w700);
-      _priorityChipSmall(canvas, defect.priority, rect.right - 150, rect.top + 13);
-
-      final tx = photoRect.right + 16;
-      final tw = rect.right - pad - tx;
-      if (defect.location.trim().isNotEmpty) {
-        _text(canvas, defect.location, Rect.fromLTWH(tx, rect.top + 66, tw, 48),
-            size: 17, weight: FontWeight.w700, color: const Color(0xFF526579), maxLines: 2);
-      }
-      _text(canvas, defect.description,
-          Rect.fromLTWH(tx, rect.top + 120, tw, 118),
-          size: 19, weight: FontWeight.w500, color: const Color(0xFF1B2B3D), maxLines: 5);
-
-      final status = defect.isResolved ? 'USUNIĘTA' : 'DO USUNIĘCIA';
-      _text(canvas, status,
-          Rect.fromLTWH(rect.left + pad, rect.bottom - 48, 180, 30),
-          size: 16, weight: FontWeight.w700,
-          color: defect.isResolved ? const Color(0xFF2E7D32) : const Color(0xFFB42318));
-      _text(canvas, 'WIĘKSZE ZDJĘCIA  ↗',
-          Rect.fromLTWH(rect.right - 245, rect.bottom - 48, 225, 30),
-          size: 15, weight: FontWeight.w700, color: const Color(0xFF2D7DD2), align: TextAlign.right);
+      _drawDefectCard(canvas, rect, d, issueImage, resolutionImage, issue.length, resolution.length);
+      issueImage?.dispose();
+      resolutionImage?.dispose();
     }
 
-    _footer(canvas, 'Raport skrócony • 6 usterek na stronie • większe zdjęcia w paczce audytu');
-    final bytes = await _pictureToJpeg(recorder);
-    for (final image in thumbnails.values) {
-      image?.dispose();
-    }
-    return bytes;
+    _footer(canvas, '6 usterek na stronie • zdjęcia w PDF są miniaturami');
+    return _pictureToJpeg(recorder, quality: 68);
   }
 
-  static void _priorityChipSmall(Canvas canvas, String priority, double x, double y) {
-    final color = switch (priority) {
+  static void _drawDefectCard(
+    Canvas canvas, Rect r, Defect d, ui.Image? issue, ui.Image? resolution,
+    int issueCount, int resolutionCount,
+  ) {
+    canvas.drawRRect(RRect.fromRectAndRadius(r, const Radius.circular(16)),
+        Paint()..color = const Color(0xFFF7F9FB));
+    canvas.drawRRect(RRect.fromRectAndRadius(r, const Radius.circular(16)),
+        Paint()..color = const Color(0xFFDDE4EB)..style = PaintingStyle.stroke..strokeWidth = 2);
+
+    final chipColor = switch (d.priority) {
       'Krytyczny' => const Color(0xFFB42318),
       'Wysoki' => const Color(0xFFD97706),
       'Niski' => const Color(0xFF2E7D32),
       _ => const Color(0xFF2D7DD2),
     };
-    final rect = Rect.fromLTWH(x, y, 132, 34);
-    canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(17)), Paint()..color = color);
-    _text(canvas, priority.toUpperCase(), rect.deflate(5), size: 12, weight: FontWeight.w700,
-        color: Colors.white, align: TextAlign.center, maxLines: 1);
-  }
+    _text(canvas, 'Poz. ${d.positionNo}', Rect.fromLTWH(r.left + 16, r.top + 14, 210, 34),
+        size: 22, weight: FontWeight.w700);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(Rect.fromLTWH(r.right - 150, r.top + 12, 134, 34), const Radius.circular(17)),
+      Paint()..color = chipColor,
+    );
+    _text(canvas, d.priority, Rect.fromLTWH(r.right - 144, r.top + 17, 122, 24),
+        size: 14, weight: FontWeight.w700, color: Colors.white, align: TextAlign.center);
 
-  static Future<Uint8List> _renderDefectPage(
-    Defect defect,
-    List<AuditPhoto> pagePhotos,
-    int pageIndex,
-    int totalPages, {
-    required bool resolution,
-  }) async {
-    final decoded = <ui.Image>[];
-    for (final photo in pagePhotos) {
-      try {
-        decoded.add(await _loadImage(photo.path));
-      } catch (_) {
-        // Uszkodzonego/nieistniejącego zdjęcia nie zatrzymujemy raportu.
-      }
+    final photoTop = r.top + 58;
+    final photoH = 190.0;
+    final photoW = resolution != null ? (r.width - 44) / 2 : r.width - 32;
+    final firstRect = Rect.fromLTWH(r.left + 16, photoTop, photoW, photoH);
+    _photoOrPlaceholder(canvas, issue, firstRect, issueCount == 0 ? 'Brak zdjęcia' : 'Zdjęcie usterki');
+    if (resolution != null) {
+      final secondRect = Rect.fromLTWH(firstRect.right + 12, photoTop, photoW, photoH);
+      _photoOrPlaceholder(canvas, resolution, secondRect, 'Po usunięciu');
     }
 
+    var y = photoTop + photoH + 12;
+    if (d.location.trim().isNotEmpty) {
+      _text(canvas, 'Lokalizacja: ${d.location}', Rect.fromLTWH(r.left + 16, y, r.width - 32, 38),
+          size: 16, weight: FontWeight.w600, maxLines: 1);
+      y += 34;
+    }
+    _text(canvas, d.description, Rect.fromLTWH(r.left + 16, y, r.width - 32, 72),
+        size: 17, color: const Color(0xFF24364A), maxLines: 3);
+    y += 78;
+
+    final status = d.isResolved ? 'USUNIĘTA' : 'DO USUNIĘCIA';
+    final statusColor = d.isResolved ? const Color(0xFF2E7D32) : const Color(0xFFB42318);
+    _text(canvas, status, Rect.fromLTWH(r.left + 16, y, 170, 30),
+        size: 15, weight: FontWeight.w700, color: statusColor);
+
+    if (d.isResolved && d.resolvedAt != null) {
+      _text(canvas, _dateTime.format(d.resolvedAt!), Rect.fromLTWH(r.left + 190, y, r.width - 206, 30),
+          size: 14, color: const Color(0xFF526579), align: TextAlign.right);
+    }
+    if (d.isResolved && d.resolutionNote.trim().isNotEmpty) {
+      _text(canvas, 'Po naprawie: ${d.resolutionNote}',
+          Rect.fromLTWH(r.left + 16, y + 30, r.width - 32, 46),
+          size: 14, color: const Color(0xFF526579), maxLines: 2);
+    }
+  }
+
+  static void _photoOrPlaceholder(Canvas canvas, ui.Image? image, Rect r, String label) {
+    canvas.drawRRect(RRect.fromRectAndRadius(r, const Radius.circular(10)),
+        Paint()..color = const Color(0xFFECEFF2));
+    if (image != null) {
+      _drawPhoto(canvas, image, r);
+    } else {
+      _text(canvas, label, Rect.fromLTWH(r.left + 8, r.top + r.height/2 - 12, r.width - 16, 28),
+          size: 14, color: const Color(0xFF7B8794), align: TextAlign.center);
+    }
+  }
+
+  static Future<Uint8List> _renderCover(Site site, Audit audit, List<Defect> defects) async {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder, const Rect.fromLTWH(0, 0, _w, _h));
     _paintBackground(canvas);
-
-    canvas.drawRect(
-      const Rect.fromLTWH(0, 0, _w, 170),
-      Paint()..color = const Color(0xFF16324F),
-    );
-    _text(
-      canvas,
-      resolution ? 'POTWIERDZENIE USUNIĘCIA • ${defect.positionNo}' : 'POZYCJA ${defect.positionNo}',
-      const Rect.fromLTWH(_m, 48, 760, 68),
-      size: resolution ? 36 : 42,
-      weight: FontWeight.w700,
-      color: Colors.white,
-    );
-    _priorityChip(canvas, defect.priority, _w - _m - 270, 52);
-
-    var y = 230.0;
-    if (pageIndex == 0) {
-      if (resolution) {
-        y = _labelValue(
-          canvas,
-          y,
-          'STATUS USTERKI',
-          defect.isResolved ? 'USTERKA USUNIĘTA' : 'USTERKA DO USUNIĘCIA',
-          compact: true,
-          maxLines: 2,
-        );
-        if (defect.resolvedAt != null) {
-          y = _labelValue(canvas, y, 'DATA USUNIĘCIA', _dateTime.format(defect.resolvedAt!), compact: true);
-        }
-        if (defect.resolutionNote.trim().isNotEmpty) {
-          y = _labelValue(
-            canvas,
-            y,
-            'KOMENTARZ PO USUNIĘCIU',
-            defect.resolutionNote,
-            compact: true,
-            maxLines: 6,
-          );
-        }
-      } else {
-        y = _labelValue(
-          canvas,
-          y,
-          'STATUS',
-          defect.isResolved ? 'USUNIĘTA' : 'DO USUNIĘCIA',
-          compact: true,
-          maxLines: 2,
-        );
-        if (defect.location.trim().isNotEmpty) {
-          y = _labelValue(canvas, y, 'LOKALIZACJA', defect.location, compact: true);
-        }
-        y = _labelValue(canvas, y, 'OPIS USTERKI', defect.description, compact: true, maxLines: 5);
-        if (defect.recommendation.trim().isNotEmpty) {
-          y = _labelValue(
-            canvas,
-            y,
-            'ZALECENIE',
-            defect.recommendation,
-            compact: true,
-            maxLines: 4,
-          );
-        }
-      }
-      y += 10;
-    } else {
-      _text(
-        canvas,
-        resolution
-            ? 'Zdjęcia po usunięciu – ciąg dalszy (${pageIndex + 1}/$totalPages)'
-            : 'Zdjęcia z audytu – ciąg dalszy (${pageIndex + 1}/$totalPages)',
-        Rect.fromLTWH(_m, y, _w - 2 * _m, 45),
-        size: 23,
-        color: const Color(0xFF526579),
-      );
-      y += 70;
-    }
-
-    _sectionTitle(canvas, y, resolution ? 'ZDJĘCIA PO USUNIĘCIU USTERKI' : 'ZDJĘCIA Z AUDYTU');
-    y += 64;
-
-    final bottom = _h - 130;
-    final availableH = bottom - y;
-    if (decoded.isEmpty) {
-      final rect = Rect.fromLTWH(_m, y, _w - 2 * _m, 420);
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(rect, const Radius.circular(16)),
-        Paint()..color = const Color(0xFFF4F6F8),
-      );
-      _text(
-        canvas,
-        'Brak dostępnego pliku zdjęcia',
-        Rect.fromLTWH(_m + 20, y + 180, _w - 2 * _m - 40, 50),
-        size: 24,
-        color: const Color(0xFF6B7785),
-        align: TextAlign.center,
-      );
-    } else {
-      const gap = 22.0;
-      final columns = decoded.length == 1 ? 1 : 2;
-      final rows = (decoded.length / columns).ceil();
-      final cellW = (_w - 2 * _m - gap * (columns - 1)) / columns;
-      final cellH = (availableH - gap * (rows - 1)) / rows;
-      for (var i = 0; i < decoded.length; i++) {
-        final col = i % columns;
-        final row = i ~/ columns;
-        final rect = Rect.fromLTWH(
-          _m + col * (cellW + gap),
-          y + row * (cellH + gap),
-          cellW,
-          cellH,
-        );
-        _drawPhoto(canvas, decoded[i], rect);
-      }
-    }
-
-    _footer(canvas, '${resolution ? 'Potwierdzenie usunięcia • ' : ''}Pozycja ${defect.positionNo} • strona ${pageIndex + 1}/$totalPages • zdjęcia pomniejszone');
-    final bytes = await _pictureToJpeg(recorder);
-    for (final image in decoded) {
-      image.dispose();
-    }
-    return bytes;
+    canvas.drawRect(const Rect.fromLTWH(0, 0, _w, 250), Paint()..color = const Color(0xFF16324F));
+    _text(canvas, 'RAPORT Z AUDYTU', const Rect.fromLTWH(82, 82, 1076, 75),
+        size: 52, weight: FontWeight.w700, color: Colors.white);
+    _text(canvas, audit.auditType, const Rect.fromLTWH(82, 164, 1076, 48),
+        size: 26, color: const Color(0xFFD9E7F5));
+    var y = 340.0;
+    y = _labelValue(canvas, y, 'OBIEKT', site.name);
+    if (site.code.trim().isNotEmpty) y = _labelValue(canvas, y, 'NR / KOD OBIEKTU', site.code);
+    if (site.address.trim().isNotEmpty) y = _labelValue(canvas, y, 'ADRES', site.address);
+    y = _labelValue(canvas, y, 'DATA ROZPOCZĘCIA', _dateTime.format(audit.startedAt));
+    if (audit.completedAt != null) y = _labelValue(canvas, y, 'DATA ZAKOŃCZENIA', _dateTime.format(audit.completedAt!));
+    y = _labelValue(canvas, y, 'AUDYTOR', audit.auditor);
+    y += 25;
+    _text(canvas, 'Usterki: ${defects.length}   •   Usunięte: ${defects.where((d)=>d.isResolved).length}',
+        Rect.fromLTWH(82, y, 1076, 55), size: 27, weight: FontWeight.w700);
+    _footer(canvas, 'Raport wygenerowany w aplikacji Audytor • wersja układu 6 usterek / strona');
+    return _pictureToJpeg(recorder, quality: 70);
   }
 
-  static void _paintBackground(Canvas canvas) {
-    canvas.drawRect(
-      const Rect.fromLTWH(0, 0, _w, _h),
-      Paint()..color = Colors.white,
-    );
+  static double _labelValue(Canvas canvas, double y, String label, String value) {
+    _text(canvas, label, Rect.fromLTWH(82, y, 300, 30), size: 17,
+        weight: FontWeight.w700, color: const Color(0xFF6A7A8C));
+    _text(canvas, value, Rect.fromLTWH(82, y + 38, 1076, 70), size: 28,
+        weight: FontWeight.w500, color: const Color(0xFF1B2B3D), maxLines: 2);
+    return y + 118;
   }
 
-  static double _labelValue(
-    Canvas canvas,
-    double y,
-    String label,
-    String value, {
-    bool compact = false,
-    int maxLines = 3,
-  }) {
-    _text(
-      canvas,
-      label,
-      Rect.fromLTWH(_m, y, 300, 32),
-      size: 17,
-      weight: FontWeight.w700,
-      color: const Color(0xFF6A7A8C),
-    );
-    final h = _measureHeight(value, _w - 2 * _m, compact ? 25 : 29, maxLines);
-    _text(
-      canvas,
-      value,
-      Rect.fromLTWH(_m, y + 38, _w - 2 * _m, h + 8),
-      size: compact ? 25 : 29,
-      weight: FontWeight.w500,
-      color: const Color(0xFF1B2B3D),
-      maxLines: maxLines,
-    );
-    return y + 38 + h + (compact ? 28 : 42);
-  }
-
-  static void _sectionTitle(Canvas canvas, double y, String title) {
-    canvas.drawRect(
-      Rect.fromLTWH(_m, y + 11, 9, 34),
-      Paint()..color = const Color(0xFF2D7DD2),
-    );
-    _text(
-      canvas,
-      title,
-      Rect.fromLTWH(_m + 26, y, _w - 2 * _m - 26, 52),
-      size: 25,
-      weight: FontWeight.w700,
-      color: const Color(0xFF24364A),
-    );
-  }
-
-  static void _priorityChip(Canvas canvas, String priority, double x, double y) {
-    final color = switch (priority) {
-      'Krytyczny' => const Color(0xFFB42318),
-      'Wysoki' => const Color(0xFFD97706),
-      'Niski' => const Color(0xFF2E7D32),
-      _ => const Color(0xFF2D7DD2),
-    };
-    final rect = Rect.fromLTWH(x, y, 270, 58);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(rect, const Radius.circular(29)),
-      Paint()..color = color,
-    );
-    _text(
-      canvas,
-      priority.toUpperCase(),
-      Rect.fromLTWH(x + 14, y + 10, 242, 36),
-      size: 20,
-      weight: FontWeight.w700,
-      color: Colors.white,
-      align: TextAlign.center,
-    );
-  }
+  static void _paintBackground(Canvas canvas) =>
+      canvas.drawRect(const Rect.fromLTWH(0, 0, _w, _h), Paint()..color = Colors.white);
 
   static void _drawPhoto(Canvas canvas, ui.Image image, Rect target) {
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(target, const Radius.circular(16)),
-      Paint()..color = const Color(0xFFF0F2F4),
-    );
-    final imageRatio = image.width / image.height;
-    final targetRatio = target.width / target.height;
-    late final double drawW;
-    late final double drawH;
-    if (imageRatio > targetRatio) {
-      drawW = target.width;
-      drawH = drawW / imageRatio;
+    final ir = image.width / image.height, tr = target.width / target.height;
+    double sw, sh, sx, sy;
+    if (ir > tr) {
+      sh = image.height.toDouble(); sw = sh * tr;
+      sx = (image.width - sw) / 2; sy = 0;
     } else {
-      drawH = target.height;
-      drawW = drawH * imageRatio;
+      sw = image.width.toDouble(); sh = sw / tr;
+      sx = 0; sy = (image.height - sh) / 2;
     }
-    final dst = Rect.fromLTWH(
-      target.left + (target.width - drawW) / 2,
-      target.top + (target.height - drawH) / 2,
-      drawW,
-      drawH,
-    );
-    canvas.drawImageRect(
-      image,
-      Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
-      dst,
-      Paint()..filterQuality = FilterQuality.medium,
-    );
+    canvas.save();
+    canvas.clipRRect(RRect.fromRectAndRadius(target, const Radius.circular(10)));
+    canvas.drawImageRect(image, Rect.fromLTWH(sx, sy, sw, sh), target,
+        Paint()..filterQuality = FilterQuality.medium);
+    canvas.restore();
   }
 
   static void _footer(Canvas canvas, String text) {
-    canvas.drawLine(
-      const Offset(_m, _h - 92),
-      const Offset(_w - _m, _h - 92),
-      Paint()
-        ..color = const Color(0xFFE1E6EB)
-        ..strokeWidth = 2,
-    );
-    _text(
-      canvas,
-      text,
-      const Rect.fromLTWH(_m, _h - 75, _w - 2 * _m, 36),
-      size: 16,
-      color: const Color(0xFF7B8794),
-      align: TextAlign.center,
-    );
+    canvas.drawLine(const Offset(_m, _h - 70), const Offset(_w - _m, _h - 70),
+        Paint()..color = const Color(0xFFE1E6EB)..strokeWidth = 2);
+    _text(canvas, text, const Rect.fromLTWH(_m, _h - 55, _w - 2 * _m, 30),
+        size: 14, color: const Color(0xFF7B8794), align: TextAlign.center);
   }
 
-  static void _text(
-    Canvas canvas,
-    String text,
-    Rect rect, {
-    double size = 24,
-    FontWeight weight = FontWeight.w400,
-    Color color = Colors.black,
-    TextAlign align = TextAlign.left,
-    int? maxLines,
+  static void _text(Canvas canvas, String text, Rect rect, {
+    double size = 24, FontWeight weight = FontWeight.w400, Color color = Colors.black,
+    TextAlign align = TextAlign.left, int? maxLines,
   }) {
     final painter = TextPainter(
-      text: TextSpan(
-        text: text,
-        style: TextStyle(
-          fontSize: size,
-          fontWeight: weight,
-          color: color,
-          height: 1.25,
-        ),
-      ),
-      textDirection: ui.TextDirection.ltr,
-      textAlign: align,
-      maxLines: maxLines,
-      ellipsis: maxLines == null ? null : '…',
-      locale: const Locale('pl', 'PL'),
+      text: TextSpan(text: text, style: TextStyle(fontSize: size, fontWeight: weight, color: color, height: 1.18)),
+      textDirection: ui.TextDirection.ltr, textAlign: align, maxLines: maxLines,
+      ellipsis: maxLines == null ? null : '…', locale: const Locale('pl','PL'),
     )..layout(maxWidth: rect.width);
     painter.paint(canvas, Offset(rect.left, rect.top));
   }
 
-  static double _measureHeight(String text, double width, double size, int maxLines) {
-    final painter = TextPainter(
-      text: TextSpan(
-        text: text,
-        style: TextStyle(fontSize: size, height: 1.25),
-      ),
-      textDirection: ui.TextDirection.ltr,
-      maxLines: maxLines,
-      ellipsis: '…',
-    )..layout(maxWidth: width);
-    return painter.height;
-  }
-
-  static Future<ui.Image> _loadImage(String path) async {
+  static Future<ui.Image> _loadThumbnail(String path) async {
     final bytes = await File(path).readAsBytes();
-    final codec = await ui.instantiateImageCodec(bytes);
+    final codec = await ui.instantiateImageCodec(bytes, targetWidth: 520, targetHeight: 360);
     final frame = await codec.getNextFrame();
     codec.dispose();
     return frame.image;
   }
 
-  static Future<Uint8List> _pictureToJpeg(ui.PictureRecorder recorder) async {
+  static Future<Uint8List> _pictureToJpeg(ui.PictureRecorder recorder, {int quality = 68}) async {
     final picture = recorder.endRecording();
     final image = await picture.toImage(_w.toInt(), _h.toInt());
     picture.dispose();
     final data = await image.toByteData(format: ui.ImageByteFormat.png);
     image.dispose();
     if (data == null) throw StateError('Nie udało się wyrenderować strony raportu.');
-
     final decoded = img.decodePng(data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes));
     if (decoded == null) throw StateError('Nie udało się skompresować strony raportu.');
-    return Uint8List.fromList(img.encodeJpg(decoded, quality: 72));
+    return Uint8List.fromList(img.encodeJpg(decoded, quality: quality));
   }
 
   static String _safe(String input) {
     final cleaned = input.trim().replaceAll(RegExp(r'[^a-zA-Z0-9ąćęłńóśźżĄĆĘŁŃÓŚŹŻ_-]+'), '_');
     return cleaned.isEmpty ? 'obiekt' : cleaned;
   }
-}
-
-class _PageLink {
-  final Rect rect;
-  final String destination;
-  const _PageLink({required this.rect, required this.destination});
 }

@@ -1,0 +1,7 @@
+Audytor 0.6.2
+- Generator PDF faktycznie grupuje USTERKI: 6 na stronę (2 x 3).
+- Jedna usterka nie tworzy już automatycznie osobnej strony.
+- W raporcie używana jest pierwsza miniatura zdjęcia usterki.
+- Dla usuniętej usterki może być pokazana miniatura zdjęcia po naprawie.
+- Miniatury dekodowane są do ok. 520 x 360, a strony PDF kompresowane jako JPEG.
+- Zachowany status, priorytet, lokalizacja, opis, data i komentarz po naprawie.
