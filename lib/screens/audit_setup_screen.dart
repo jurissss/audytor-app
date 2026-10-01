@@ -16,6 +16,7 @@ class _AuditSetupScreenState extends State<AuditSetupScreen> {
   final _store = TextEditingController();
   final _address = TextEditingController();
   final _auditor = TextEditingController();
+  final _type = TextEditingController(text: 'Audyt techniczny');
   bool _saving = false;
 
   @override
@@ -35,6 +36,7 @@ class _AuditSetupScreenState extends State<AuditSetupScreen> {
     _store.dispose();
     _address.dispose();
     _auditor.dispose();
+    _type.dispose();
     super.dispose();
   }
 
@@ -47,6 +49,7 @@ class _AuditSetupScreenState extends State<AuditSetupScreen> {
         storeNumber: _store.text.trim(),
         address: _address.text.trim(),
         auditor: _auditor.text.trim(),
+        auditType: _type.text.trim(),
         startedAt: DateTime.now(),
       ),
     );
@@ -90,6 +93,16 @@ class _AuditSetupScreenState extends State<AuditSetupScreen> {
                 prefixIcon: Icon(Icons.person_outline),
               ),
               validator: (v) => v == null || v.trim().isEmpty ? 'Podaj audytora' : null,
+            ),
+            const SizedBox(height: 14),
+            TextFormField(
+              controller: _type,
+              decoration: const InputDecoration(
+                labelText: 'Typ audytu *',
+                prefixIcon: Icon(Icons.assignment_outlined),
+              ),
+              validator: (v) =>
+                  v == null || v.trim().isEmpty ? 'Podaj typ audytu' : null,
             ),
             const SizedBox(height: 24),
             FilledButton.icon(

@@ -452,6 +452,7 @@ class _AuditScreenState extends State<AuditScreen> {
                           Text('Numer sklepu: ${_audit.storeNumber}'),
                           Text('Adres: ${_audit.address}'),
                           Text('Audytor: ${_audit.auditor}'),
+                          Text('Typ audytu: ${_audit.auditType}'),
                           Text('Data: ${dateFormat.format(_audit.startedAt)}'),
                           const SizedBox(height: 8),
                           Text(
@@ -485,10 +486,10 @@ class _AuditScreenState extends State<AuditScreen> {
                         _notes[defect.id] ?? const <DefectNote>[];
 
                     return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.only(bottom: 8),
                       child: Card(
                         child: Padding(
-                          padding: const EdgeInsets.all(14),
+                          padding: const EdgeInsets.fromLTRB(10, 8, 10, 9),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -499,7 +500,7 @@ class _AuditScreenState extends State<AuditScreen> {
                                       '${defect.positionNo} • ${defect.location.isEmpty ? 'Usterka' : defect.location}',
                                       style: const TextStyle(
                                         fontWeight: FontWeight.w700,
-                                        fontSize: 16,
+                                        fontSize: 15,
                                       ),
                                     ),
                                   ),
@@ -524,14 +525,14 @@ class _AuditScreenState extends State<AuditScreen> {
                                     ),
                                 ],
                               ),
-                              const SizedBox(height: 6),
+                              const SizedBox(height: 3),
                               Text(defect.description),
                               if (defect.recommendation.trim().isNotEmpty) ...[
-                                const SizedBox(height: 5),
-                                Text('Zalecenie: ${defect.recommendation}'),
+                                const SizedBox(height: 3),
+                                Text('Zalecenie: ${defect.recommendation}', style: const TextStyle(fontSize: 13)),
                               ],
                               if (defect.isResolved) ...[
-                                const SizedBox(height: 8),
+                                const SizedBox(height: 5),
                                 Text(
                                   'Usunięto: ${defect.resolvedAt == null ? '' : dateFormat.format(defect.resolvedAt!)}\n${defect.resolutionNote}',
                                   style: TextStyle(
@@ -541,9 +542,9 @@ class _AuditScreenState extends State<AuditScreen> {
                                 ),
                               ],
                               if (defectPhotos.isNotEmpty) ...[
-                                const SizedBox(height: 12),
+                                const SizedBox(height: 8),
                                 SizedBox(
-                                  height: 82,
+                                  height: 58,
                                   child: ListView.separated(
                                     scrollDirection: Axis.horizontal,
                                     itemCount: defectPhotos.length,
@@ -555,8 +556,8 @@ class _AuditScreenState extends State<AuditScreen> {
                                         borderRadius: BorderRadius.circular(10),
                                         child: Image.file(
                                           File(defectPhotos[index].path),
-                                          width: 100,
-                                          height: 82,
+                                          width: 72,
+                                          height: 58,
                                           fit: BoxFit.cover,
                                         ),
                                       ),
@@ -565,33 +566,40 @@ class _AuditScreenState extends State<AuditScreen> {
                                 ),
                               ],
                               if (defectNotes.isNotEmpty) ...[
-                                const SizedBox(height: 14),
-                                const Divider(),
-                                Text(
-                                  'Historia uwag (${defectNotes.length})',
-                                  style: const TextStyle(fontWeight: FontWeight.w700),
-                                ),
                                 const SizedBox(height: 6),
-                                ...defectNotes.reversed.map((note) {
-                                  final notePhotos = note.photoPaths
-                                      .map(
-                                        (path) => AuditPhoto(
-                                          defectId: defect.id!,
-                                          path: path,
-                                          createdAt: note.createdAt,
-                                          kind: 'note',
-                                        ),
-                                      )
-                                      .toList();
+                                const Divider(height: 1),
+                                ExpansionTile(
+                                  tilePadding: EdgeInsets.zero,
+                                  childrenPadding: EdgeInsets.zero,
+                                  dense: true,
+                                  visualDensity: VisualDensity.compact,
+                                  minTileHeight: 34,
+                                  title: Text(
+                                    'Historia uwag (${defectNotes.length})',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  children: defectNotes.reversed.map((note) {
+                                    final notePhotos = note.photoPaths
+                                        .map(
+                                          (path) => AuditPhoto(
+                                            defectId: defect.id!,
+                                            path: path,
+                                            createdAt: note.createdAt,
+                                            kind: 'note',
+                                          ),
+                                        )
+                                        .toList();
 
-                                  return Padding(
-                                    padding: const EdgeInsets.only(bottom: 9),
-                                    child: Container(
+                                    return Container(
                                       width: double.infinity,
-                                      padding: const EdgeInsets.all(10),
+                                      margin: const EdgeInsets.only(bottom: 5),
+                                      padding: const EdgeInsets.all(7),
                                       decoration: BoxDecoration(
                                         color: const Color(0xFFF5F7F9),
-                                        borderRadius: BorderRadius.circular(10),
+                                        borderRadius: BorderRadius.circular(8),
                                       ),
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -600,18 +608,21 @@ class _AuditScreenState extends State<AuditScreen> {
                                             dateFormat.format(note.createdAt),
                                             style: const TextStyle(
                                               fontWeight: FontWeight.w600,
-                                              fontSize: 12,
+                                              fontSize: 11,
                                             ),
                                           ),
                                           if (note.text.isNotEmpty) ...[
-                                            const SizedBox(height: 4),
-                                            Text(note.text),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              note.text,
+                                              style: const TextStyle(fontSize: 13),
+                                            ),
                                           ],
                                           if (notePhotos.isNotEmpty) ...[
-                                            const SizedBox(height: 7),
+                                            const SizedBox(height: 5),
                                             Wrap(
-                                              spacing: 7,
-                                              runSpacing: 7,
+                                              spacing: 5,
+                                              runSpacing: 5,
                                               children: notePhotos.asMap().entries.map((entry) {
                                                 return GestureDetector(
                                                   onTap: () => _openPhotos(
@@ -619,11 +630,11 @@ class _AuditScreenState extends State<AuditScreen> {
                                                     entry.key,
                                                   ),
                                                   child: ClipRRect(
-                                                    borderRadius: BorderRadius.circular(8),
+                                                    borderRadius: BorderRadius.circular(7),
                                                     child: Image.file(
                                                       File(entry.value.path),
-                                                      width: 72,
-                                                      height: 58,
+                                                      width: 52,
+                                                      height: 42,
                                                       fit: BoxFit.cover,
                                                     ),
                                                   ),
@@ -633,30 +644,45 @@ class _AuditScreenState extends State<AuditScreen> {
                                           ],
                                         ],
                                       ),
-                                    ),
-                                  );
-                                }),
+                                    );
+                                  }).toList(),
+                                ),
                               ],
                               if (_audit.isCompleted) ...[
-                                const SizedBox(height: 12),
+                                const SizedBox(height: 7),
                                 Wrap(
-                                  spacing: 8,
-                                  runSpacing: 8,
+                                  spacing: 6,
+                                  runSpacing: 6,
                                   children: [
                                     if (!defect.isResolved)
                                       FilledButton.tonalIcon(
+                                        style: FilledButton.styleFrom(
+                                          visualDensity: VisualDensity.compact,
+                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                                        ),
                                         onPressed: () => _confirmResolution(defect),
                                         icon: const Icon(Icons.check_circle_outline),
                                         label: const Text('Potwierdź usunięcie'),
                                       )
                                     else
                                       FilledButton.tonalIcon(
+                                        style: FilledButton.styleFrom(
+                                          visualDensity: VisualDensity.compact,
+                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                                        ),
                                         onPressed: () => _confirmResolution(defect),
                                         icon: const Icon(Icons.edit_outlined),
                                         label: const Text('Edytuj potwierdzenie'),
                                       ),
                                     if (!defect.isResolved)
                                       OutlinedButton.icon(
+                                        style: OutlinedButton.styleFrom(
+                                          visualDensity: VisualDensity.compact,
+                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                                        ),
                                         onPressed: () => _addNote(defect),
                                         icon: const Icon(Icons.note_add_outlined),
                                         label: const Text('Dodaj uwagę'),

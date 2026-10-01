@@ -1,0 +1,8 @@
+Audytor 0.8.7+20
+
+Poprawka raportu PDF:
+- usunięta podwójna strona przy uwadze ze zdjęciem,
+- uwaga ze zdjęciem generuje wyłącznie stronę dużego zdjęcia,
+- na tej stronie wyświetlana jest data i treść uwagi,
+- osobna strona uwag powstaje tylko wtedy, gdy uwaga ma tekst, ale nie ma zdjęć,
+- zachowane są linki „Powrót do usterki” u góry i na dole.

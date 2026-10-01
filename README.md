@@ -1,6 +1,6 @@
 # Audytor
 
-Wersja **0.8.6+19**.
+Wersja **0.8.8+21**.
 
 ## Najważniejsze zmiany
 
@@ -21,3 +21,17 @@ Wersja **0.8.6+19**.
 - raport zachowuje układ 8 usterek na stronie i 5 miniatur w jednym rzędzie,
 - duże zdjęcia mają link **Powrót do usterki** u góry i na dole,
 - pozostaje szybkie generowanie, kompresja zdjęć do ok. 250 kB oraz dynamiczny podział PDF do ok. 23 MB bez rozdzielania jednej usterki.
+
+## Poprawka 0.8.7+20 – uwagi w PDF
+- uwaga ze zdjęciem nie tworzy już osobnej dodatkowej strony historii,
+- zdjęcie uwagi ma tylko swoją właściwą stronę zdjęciową,
+- na stronie zdjęcia uwagi pokazuje się data i treść uwagi,
+- osobna strona „Uwagi tekstowe” powstaje tylko dla uwag bez zdjęć.
+
+## 0.8.8+21 – bardziej zwarta lista usterek
+- karty usterek mają mniejsze odstępy i padding,
+- miniatury na liście są mniejsze,
+- historia uwag jest domyślnie zwinięta i rozwijana na żądanie,
+- przyciski „Potwierdź usunięcie” i „Dodaj uwagę” są bardziej kompaktowe,
+- w formularzu nowego audytu dodano pole „Typ audytu”,
+- typ audytu jest widoczny także w nagłówku audytu i na liście audytów.

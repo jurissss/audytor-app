@@ -54,11 +54,13 @@ class _ReportPhoto {
   final String path;
   final String label;
   final DateTime createdAt;
+  final String noteText;
 
   const _ReportPhoto({
     required this.path,
     required this.label,
     required this.createdAt,
+    this.noteText = '',
   });
 }
 
@@ -195,6 +197,7 @@ class ReportService {
               path: path,
               label: 'UWAGA',
               createdAt: note.createdAt,
+              noteText: note.text,
             ),
           );
         }
@@ -413,11 +416,19 @@ class ReportService {
       final history =
           notes[defect.id] ?? const <DefectNote>[];
 
-      if (history.isNotEmpty) {
-        _addNotesHistoryPage(
+      final textOnlyNotes = history
+          .where(
+            (note) =>
+                note.photoPaths.isEmpty &&
+                note.text.trim().isNotEmpty,
+          )
+          .toList();
+
+      if (textOnlyNotes.isNotEmpty) {
+        _addTextOnlyNotesPage(
           pdf,
           defect: defect,
-          notes: history,
+          notes: textOnlyNotes,
         );
       }
 
@@ -868,7 +879,7 @@ class ReportService {
     );
   }
 
-  static void _addNotesHistoryPage(
+  static void _addTextOnlyNotesPage(
     pw.Document pdf, {
     required Defect defect,
     required List<DefectNote> notes,
@@ -882,7 +893,7 @@ class ReportService {
               pw.MainAxisAlignment.spaceBetween,
           children: [
             pw.Text(
-              'Historia uwag • pozycja ${defect.positionNo}',
+              'Uwagi tekstowe • pozycja ${defect.positionNo}',
               style: pw.TextStyle(
                 fontSize: 17,
                 fontWeight: pw.FontWeight.bold,
@@ -948,14 +959,6 @@ class ReportService {
                       note.text,
                       style:
                           const pw.TextStyle(fontSize: 10),
-                    ),
-                  ],
-                  if (note.photoPaths.isNotEmpty) ...[
-                    pw.SizedBox(height: 5),
-                    pw.Text(
-                      'Zdjęcia: ${note.photoPaths.length}',
-                      style:
-                          const pw.TextStyle(fontSize: 9),
                     ),
                   ],
                 ],
@@ -1052,6 +1055,27 @@ class ReportService {
                             color: PdfColors.grey700,
                           ),
                         ),
+                        if (photo.label == 'UWAGA') ...[
+                          pw.SizedBox(height: 3),
+                          pw.Text(
+                            'Dodano: ${_dateTime.format(photo.createdAt)}',
+                            style: const pw.TextStyle(
+                              fontSize: 9,
+                              color: PdfColors.grey700,
+                            ),
+                          ),
+                          if (photo.noteText.trim().isNotEmpty) ...[
+                            pw.SizedBox(height: 3),
+                            pw.Text(
+                              photo.noteText,
+                              maxLines: 3,
+                              style: const pw.TextStyle(
+                                fontSize: 9,
+                                color: PdfColors.grey800,
+                              ),
+                            ),
+                          ],
+                        ],
                       ],
                     ),
                   ),

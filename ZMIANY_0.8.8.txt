@@ -1,0 +1,12 @@
+Audytor 0.8.8+21
+
+LISTA USTEREK
+- mniejsze odstępy i padding kart
+- mniejsze miniatury
+- historia uwag zwinięta w ExpansionTile
+- kompaktowe przyciski akcji
+
+NOWY AUDYT
+- dodane pole Typ audytu
+- domyślnie: Audyt techniczny
+- typ widoczny na ekranie audytu i liście audytów

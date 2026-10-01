@@ -217,9 +217,9 @@ class _HomeScreenState extends State<HomeScreen> {
                             style: const TextStyle(fontWeight: FontWeight.w700),
                           ),
                           subtitle: Text(
-                            'Sklep ${audit.storeNumber} • ${df.format(audit.startedAt)}\n'
-                            '${audit.address}\n'
-                            'Audytor: ${audit.auditor} • ${audit.isCompleted ? 'Zakończony' : 'W trakcie'}',
+                            'Sklep ${audit.storeNumber} • ${audit.auditType}\n'
+                            '${df.format(audit.startedAt)} • ${audit.auditor}\n'
+                            '${audit.isCompleted ? 'Zakończony' : 'W trakcie'}',
                           ),
                           isThreeLine: true,
                           trailing: const Icon(Icons.chevron_right_rounded),
