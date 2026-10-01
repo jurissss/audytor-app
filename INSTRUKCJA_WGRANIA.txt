@@ -1,0 +1,7 @@
+AUDYTOR — CZYSTE WGRANIE
+1. Rozpakuj ZIP na komputerze.
+2. Wgraj CAŁĄ zawartość do pustego repozytorium GitHub.
+3. Nie wgrywaj ZIP-a.
+4. Musi zostać wgrany także katalog .github.
+5. Sprawdź ścieżkę .github/workflows/main.yml.
+6. Workflow ma nazywać się: Audytor Android - SDK36.
