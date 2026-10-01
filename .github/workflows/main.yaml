@@ -67,11 +67,20 @@ jobs:
             "platforms;android-36" \
             "build-tools;36.0.0"
 
+      # WAŻNE:
+      # Repozytorium nazywa się audytor-app.
+      # Myślnik nie jest dozwolony w nazwie pakietu Dart,
+      # dlatego jawnie podajemy poprawną nazwę projektu.
       - name: Create Android project if missing
         shell: bash
         run: |
           if [ ! -d android ]; then
-            flutter create --platforms=android .
+            flutter create \
+              --project-name audytor_app \
+              --platforms=android \
+              .
+          else
+            echo "Android project already exists."
           fi
 
       - name: Install dependencies
@@ -146,12 +155,14 @@ jobs:
           echo "=============================="
           echo "APPLICATION SDK"
           echo "=============================="
+
           grep -R -n "compileSdk" android/app/build.gradle* || true
 
           echo ""
           echo "=============================="
           echo "FILE_PICKER SDK"
           echo "=============================="
+
           find ~/.pub-cache \
             -path "*file_picker*/android/build.gradle*" \
             -type f \
