@@ -1,6 +1,6 @@
 # Audytor
 
-Wersja **0.8.8+21**.
+Wersja **0.8.9+22**.
 
 ## Najważniejsze zmiany
 
@@ -35,3 +35,9 @@ Wersja **0.8.8+21**.
 - przyciski „Potwierdź usunięcie” i „Dodaj uwagę” są bardziej kompaktowe,
 - w formularzu nowego audytu dodano pole „Typ audytu”,
 - typ audytu jest widoczny także w nagłówku audytu i na liście audytów.
+
+## 0.8.9+22 – stały przycisk zapisu usterki
+- przycisk „Zapisz usterkę” jest stale widoczny jako pływający przycisk,
+- podczas edycji pokazuje „Zapisz zmiany”,
+- nie trzeba przewijać formularza na sam dół,
+- dolna część formularza ma dodatkowy margines, żeby przycisk nie zasłaniał pól.

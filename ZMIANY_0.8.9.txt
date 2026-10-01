@@ -1,0 +1,7 @@
+Audytor 0.8.9+22
+
+FORMULARZ USTERKI
+- przycisk Zapisz usterkę stale widoczny na ekranie
+- przy edycji: Zapisz zmiany
+- pływający przycisk podobny do Dodaj usterkę na ekranie audytu
+- dodatkowy dolny margines, aby przycisk nie zasłaniał treści

@@ -270,10 +270,22 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text(widget.defect == null ? 'Nowa usterka' : 'Edytuj usterkę')),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _saving ? null : _save,
+        icon: _saving
+            ? const SizedBox.square(
+                dimension: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Icons.save_outlined),
+        label: Text(
+          widget.defect == null ? 'Zapisz usterkę' : 'Zapisz zmiany',
+        ),
+      ),
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 110),
           children: [
             Row(
               children: [
@@ -328,14 +340,7 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
               title: const Text('Brak tabliczki znamionowej'),
               onChanged: (value) => setState(() => _nameplateUnavailable = value ?? false),
             ),
-            const SizedBox(height: 26),
-            FilledButton.icon(
-              onPressed: _saving ? null : _save,
-              icon: _saving
-                  ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.save_outlined),
-              label: Text(widget.defect == null ? 'Zapisz usterkę' : 'Zapisz zmiany'),
-            ),
+            const SizedBox(height: 90),
           ],
         ),
       ),
