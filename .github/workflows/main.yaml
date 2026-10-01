@@ -20,13 +20,6 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android SDK 36
-        run: |
-          sdkmanager "platforms;android-36" "build-tools;36.0.0"
-
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -36,11 +29,57 @@ jobs:
       - name: Flutter version
         run: flutter --version
 
-      - name: Create Android project
+      - name: Locate Android SDK and install SDK 36
+        shell: bash
+        run: |
+          set -e
+
+          echo "ANDROID_HOME=${ANDROID_HOME:-}"
+          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-}"
+
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+
+          SDKMANAGER=""
+
+          for candidate in \
+            "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
+            "$SDK_ROOT/cmdline-tools/16.0/bin/sdkmanager" \
+            "$SDK_ROOT/cmdline-tools/12.0/bin/sdkmanager"
+          do
+            if [ -x "$candidate" ]; then
+              SDKMANAGER="$candidate"
+              break
+            fi
+          done
+
+          if [ -z "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "$SDK_ROOT" -type f -name sdkmanager -perm -111 2>/dev/null | head -n 1 || true)"
+          fi
+
+          if [ -z "$SDKMANAGER" ]; then
+            echo "ERROR: sdkmanager not found"
+            find /usr/local/lib/android -type f -name sdkmanager 2>/dev/null || true
+            exit 1
+          fi
+
+          echo "Using sdkmanager:"
+          echo "$SDKMANAGER"
+
+          yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+
+          "$SDKMANAGER" \
+            "platform-tools" \
+            "platforms;android-36" \
+            "build-tools;36.0.0"
+
+      - name: Create Android project if missing
         shell: bash
         run: |
           if [ ! -d android ]; then
+            echo "Android directory missing - creating it"
             flutter create --platforms=android .
+          else
+            echo "Android directory already exists"
           fi
 
       - name: Install dependencies
@@ -53,7 +92,9 @@ jobs:
           from pathlib import Path
           import re
 
-          files = list(Path("android").rglob("build.gradle"))
+          files = []
+
+          files += list(Path("android").rglob("build.gradle"))
           files += list(Path("android").rglob("build.gradle.kts"))
 
           cache = Path.home() / ".pub-cache"
@@ -63,6 +104,7 @@ jobs:
               files += list(cache.rglob("android/build.gradle.kts"))
 
           for p in files:
+
               try:
                   s = p.read_text(encoding="utf-8")
               except Exception:
@@ -72,40 +114,42 @@ jobs:
 
               s = s.replace(
                   "compileSdk = flutter.compileSdkVersion",
-                  "compileSdk = 36",
+                  "compileSdk = 36"
               )
 
               s = s.replace(
                   "compileSdkVersion flutter.compileSdkVersion",
-                  "compileSdkVersion 36",
+                  "compileSdkVersion 36"
               )
 
               s = re.sub(
                   r"compileSdkVersion\s+[0-9]+",
                   "compileSdkVersion 36",
-                  s,
+                  s
               )
 
               s = re.sub(
                   r"compileSdk\s*=\s*[0-9]+",
                   "compileSdk = 36",
-                  s,
+                  s
               )
 
               if s != old:
                   p.write_text(s, encoding="utf-8")
-                  print("Patched:", p)
+                  print("PATCHED:", p)
 
           PY
 
+          echo ""
           echo "=============================="
-          echo "APP compileSdk"
+          echo "APPLICATION SDK"
           echo "=============================="
 
           grep -R -n "compileSdk" android/app/build.gradle* || true
 
+          echo ""
           echo "=============================="
-          echo "FILE PICKER compileSdk"
+          echo "FILE_PICKER SDK"
           echo "=============================="
 
           find ~/.pub-cache \
@@ -114,10 +158,17 @@ jobs:
             -print \
             -exec grep -n "compileSdk" {} \; || true
 
+      - name: Flutter clean
+        run: flutter clean
+
+      - name: Restore dependencies
+        run: flutter pub get
+
       - name: Build APK
         run: flutter build apk --release
 
       - name: Verify APK
+        shell: bash
         run: |
           echo "=============================="
           echo "APK RESULT"
