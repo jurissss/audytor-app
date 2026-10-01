@@ -1,0 +1,11 @@
+Audytor 0.6.3 — wymagane zmiany:
+- import 'report_service.dart';
+- w exportForEmail PRZED ZipEncoder:
+  final report = await ReportService.generate(site: site, audit: audit, defects: defects, photos: photos);
+  archive.addFile(ArchiveFile('RAPORT_AUDYTU.pdf', report.bytes.length, report.bytes));
+- utwórz ZDJECIA.html: sekcja dla każdej usterki, wszystkie zdjęcia jako:
+  <a href="photos/...jpg"><img src="photos/...jpg"></a>
+  i dodaj ArchiveFile('ZDJECIA.html', ...)
+- rodzaje zdjęć: issue, nameplate, resolution
+- importer musi importować wszystkie trzy rodzaje.
+- format paczki: 2; dekoder akceptuje 1 i 2.

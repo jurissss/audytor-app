@@ -1,0 +1,9 @@
+Projekt zmian Audytor 0.6.3+9
+- PDF 4x1 (cztery usterki pionowo na A4)
+- zdjęcia bez rozciągania
+- do 4 zdjęć po naprawie + licznik pozostałych
+- obowiązkowa tabliczka znamionowa lub jawne „Brak tabliczki”
+- nowy typ zdjęcia nameplate
+- eksport zawiera RAPORT_AUDYTU.pdf
+- eksport zawiera ZDJECIA.html z klikalnymi zdjęciami
+- paczka nadal zawiera manifest i skompresowane photos/

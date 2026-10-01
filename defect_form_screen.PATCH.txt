@@ -1,0 +1,8 @@
+Audytor 0.6.3 — formularz usterki:
+- zwykłe zdjęcia usterki pozostają wymagane.
+- osobna sekcja „Tabliczka znamionowa *”.
+- przycisk: Zrób zdjęcie / Dodaj z galerii.
+- checkbox: „Brak tabliczki znamionowej”.
+- zapis jest blokowany, gdy nie ma zdjęcia nameplate i checkbox nie jest zaznaczony.
+- tabliczka jest zapisywana przez replacePhotos(defectId, paths, kind: 'nameplate').
+- edycja rozdziela initialPhotos na kind issue i nameplate.
