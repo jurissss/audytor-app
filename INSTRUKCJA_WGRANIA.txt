@@ -1,0 +1,18 @@
+AUDYTOR 0.7.0+11 — PEŁNE REPOZYTORIUM
+
+1. Usuń stare pliki z repozytorium.
+2. Rozpakuj tę paczkę.
+3. Wgraj CAŁĄ zawartość katalogu audytor_repo_0.7.0 do katalogu głównego repozytorium.
+4. Zachowaj strukturę katalogów, w szczególności:
+   .github/workflows/main.yaml
+   lib/...
+   pubspec.yaml
+5. Nie wgrywaj starych plików PATCH ani duplikatów .dart do katalogu głównego.
+6. Po push do gałęzi main GitHub Actions automatycznie uruchomi analizę i build APK.
+
+KONTROLA PRZED BUILDEM:
+- lib/services/report_service.dart ma: _defectsPerPage = 4
+- lib/services/audit_package_service.dart ma: _formatVersion = 2
+- lib/models/audit_photo.dart ma: isNameplate
+- lib/screens/defect_form_screen.dart ma tekst: Brak tabliczki znamionowej
+- pubspec.yaml ma: version: 0.7.0+11
