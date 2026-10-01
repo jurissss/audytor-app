@@ -1,18 +1,14 @@
-AUDYTOR 0.7.0+11 — PEŁNE REPOZYTORIUM
+AUDYTOR 0.8.0+12 - WGRANIE PEŁNEGO REPO
 
-1. Usuń stare pliki z repozytorium.
-2. Rozpakuj tę paczkę.
-3. Wgraj CAŁĄ zawartość katalogu audytor_repo_0.7.0 do katalogu głównego repozytorium.
-4. Zachowaj strukturę katalogów, w szczególności:
+1. Otwórz sklonowane repozytorium audytor-app w Eksploratorze Windows.
+2. Usuń starą zawartość repozytorium, ale NIE usuwaj ukrytego folderu .git.
+3. Rozpakuj tę paczkę i skopiuj CAŁĄ jej zawartość do folderu repozytorium.
+4. Sprawdź, czy istnieje:
    .github/workflows/main.yaml
-   lib/...
+   lib/main.dart
+   lib/screens/photo_viewer_screen.dart
    pubspec.yaml
-5. Nie wgrywaj starych plików PATCH ani duplikatów .dart do katalogu głównego.
-6. Po push do gałęzi main GitHub Actions automatycznie uruchomi analizę i build APK.
-
-KONTROLA PRZED BUILDEM:
-- lib/services/report_service.dart ma: _defectsPerPage = 4
-- lib/services/audit_package_service.dart ma: _formatVersion = 2
-- lib/models/audit_photo.dart ma: isNameplate
-- lib/screens/defect_form_screen.dart ma tekst: Brak tabliczki znamionowej
-- pubspec.yaml ma: version: 0.7.0+11
+5. W GitHub Desktop wpisz Summary: Audytor 0.8.0 full repo
+6. Kliknij Commit to main.
+7. Kliknij Push origin.
+8. GitHub Actions automatycznie uruchomi budowę APK.

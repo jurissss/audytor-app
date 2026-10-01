@@ -478,7 +478,7 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
             TextFormField(
               controller: _location,
               decoration: const InputDecoration(
-                labelText: 'Lokalizacja',
+                labelText: 'Nazwa urządzenia / lokalizacja',
                 prefixIcon:
                     Icon(Icons.place_outlined),
               ),

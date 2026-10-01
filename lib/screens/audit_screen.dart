@@ -15,6 +15,7 @@ import '../services/photo_service.dart';
 import '../services/report_service.dart';
 import 'defect_form_screen.dart';
 import 'defect_resolution_screen.dart';
+import 'photo_viewer_screen.dart';
 
 class AuditScreen extends StatefulWidget {
   final Site site;
@@ -721,6 +722,89 @@ class _AuditScreenState extends State<AuditScreen> {
                                         Color(0xFF66788A),
                                   ),
                                 ),
+                                if (all.isNotEmpty) ...[
+                                  const SizedBox(height: 10),
+                                  SizedBox(
+                                    height: 92,
+                                    child: ListView.separated(
+                                      scrollDirection: Axis.horizontal,
+                                      itemCount: all.length,
+                                      separatorBuilder: (_, __) =>
+                                          const SizedBox(width: 8),
+                                      itemBuilder: (_, photoIndex) {
+                                        final photo = all[photoIndex];
+                                        final label = switch (photo.kind) {
+                                          'nameplate' => 'Tabliczka',
+                                          'resolution' => 'Po naprawie',
+                                          _ => 'Usterka',
+                                        };
+                                        return InkWell(
+                                          borderRadius: BorderRadius.circular(10),
+                                          onTap: () => Navigator.of(context).push(
+                                            MaterialPageRoute(
+                                              builder: (_) => PhotoViewerScreen(
+                                                photos: all,
+                                                initialIndex: photoIndex,
+                                              ),
+                                            ),
+                                          ),
+                                          child: SizedBox(
+                                            width: 112,
+                                            child: ClipRRect(
+                                              borderRadius: BorderRadius.circular(10),
+                                              child: Stack(
+                                                fit: StackFit.expand,
+                                                children: [
+                                                  Image.file(
+                                                    File(photo.path),
+                                                    fit: BoxFit.cover,
+                                                    errorBuilder: (_, __, ___) =>
+                                                        const ColoredBox(
+                                                      color: Color(0xFFE5E9EE),
+                                                      child: Icon(
+                                                        Icons.broken_image_outlined,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  Align(
+                                                    alignment: Alignment.bottomCenter,
+                                                    child: Container(
+                                                      width: double.infinity,
+                                                      padding: const EdgeInsets.symmetric(
+                                                        horizontal: 4,
+                                                        vertical: 3,
+                                                      ),
+                                                      color: Colors.black54,
+                                                      child: Text(
+                                                        label,
+                                                        textAlign: TextAlign.center,
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow.ellipsis,
+                                                        style: const TextStyle(
+                                                          color: Colors.white,
+                                                          fontSize: 10,
+                                                          fontWeight: FontWeight.w600,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  const Text(
+                                    'Dotknij miniatury, aby otworzyć pełne zdjęcie i powiększać je gestem.',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Color(0xFF66788A),
+                                    ),
+                                  ),
+                                ],
                                 if (defect.isResolved) ...[
                                   const SizedBox(height: 10),
                                   Container(

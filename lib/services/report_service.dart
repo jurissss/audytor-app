@@ -31,7 +31,7 @@ class ReportResult {
 class ReportService {
   static const double _w = 1240;
   static const double _h = 1754;
-  static const double _m = 58;
+  static const double _m = 52;
   static const int _defectsPerPage = 4;
   static final DateFormat _dateTime = DateFormat('dd.MM.yyyy HH:mm');
 
@@ -43,30 +43,53 @@ class ReportService {
     String? galleryHref,
   }) async {
     final pdf = pw.Document();
+    final pages = defects.isEmpty ? 1 : (defects.length / _defectsPerPage).ceil();
 
-    _addRasterPage(pdf, await _renderCover(site, audit, defects));
-
-    for (var start = 0; start < defects.length; start += _defectsPerPage) {
-      final end = (start + _defectsPerPage).clamp(0, defects.length);
+    if (defects.isEmpty) {
       _addRasterPage(
         pdf,
-        await _renderDefectsPage(defects.sublist(start, end), photos),
+        await _renderTablePage(
+          site,
+          audit,
+          const <Defect>[],
+          photos,
+          pageNo: 1,
+          pageCount: 1,
+          totalDefects: 0,
+        ),
       );
+    } else {
+      for (var start = 0; start < defects.length; start += _defectsPerPage) {
+        final end = (start + _defectsPerPage).clamp(0, defects.length);
+        _addRasterPage(
+          pdf,
+          await _renderTablePage(
+            site,
+            audit,
+            defects.sublist(start, end),
+            photos,
+            pageNo: (start ~/ _defectsPerPage) + 1,
+            pageCount: pages,
+            totalDefects: defects.length,
+          ),
+        );
+      }
     }
 
-    // Dodatkowe strony zdjęciowe. Dzięki temu żadne zdjęcie nie znika z PDF.
+    // Każde zdjęcie ponad pierwsze 4 miniatury trafia na strony dodatkowe.
     for (final defect in defects) {
       final all = photos[defect.id] ?? const <AuditPhoto>[];
-      if (all.length <= 6) continue;
+      if (all.length <= 4) continue;
+      final remaining = all.sublist(4);
 
-      for (var start = 0; start < all.length; start += 12) {
-        final end = (start + 12).clamp(0, all.length);
+      for (var start = 0; start < remaining.length; start += 12) {
+        final end = (start + 12).clamp(0, remaining.length);
         _addRasterPage(
           pdf,
           await _renderPhotoContinuation(
             defect,
-            all.sublist(start, end),
-            startIndex: start,
+            remaining.sublist(start, end),
+            startIndex: start + 4,
             total: all.length,
           ),
         );
@@ -82,26 +105,15 @@ class ReportService {
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               pw.Text(
-                'Galeria zdjęć',
+                'Dokumentacja dodatkowa',
                 style: pw.TextStyle(
-                  fontSize: 24,
+                  fontSize: 22,
                   fontWeight: pw.FontWeight.bold,
                 ),
               ),
-              pw.SizedBox(height: 18),
-              pw.Text(
-                'Pełna galeria zdjęć znajduje się w pliku ZDJECIA.html dołączonym do paczki audytu.',
-              ),
               pw.SizedBox(height: 14),
-              pw.UrlLink(
-                destination: galleryHref,
-                child: pw.Text(
-                  'Otwórz ZDJECIA.html',
-                  style: const pw.TextStyle(
-                    color: PdfColors.blue,
-                    decoration: pw.TextDecoration.underline,
-                  ),
-                ),
+              pw.Text(
+                'Paczka audytu zawiera także plik ZDJECIA.html oraz skompresowane zdjęcia w pełnym rozmiarze. Na telefonie najpewniejszy podgląd dużych zdjęć jest dostępny bezpośrednio w aplikacji Audytor.',
               ),
             ],
           ),
@@ -110,29 +122,20 @@ class ReportService {
     }
 
     final bytes = await pdf.save();
-
     final docs = await getApplicationDocumentsDirectory();
     final dir = Directory(p.join(docs.path, 'reports'));
     if (!await dir.exists()) await dir.create(recursive: true);
 
     final filename =
         'Audyt_${_safe(site.name)}_${DateFormat('yyyyMMdd_HHmm').format(audit.startedAt)}_aktualny_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.pdf';
-
     final file = File(p.join(dir.path, filename));
     await file.writeAsBytes(bytes, flush: true);
 
-    return ReportResult(
-      bytes: bytes,
-      path: file.path,
-      filename: filename,
-    );
+    return ReportResult(bytes: bytes, path: file.path, filename: filename);
   }
 
   static Future<void> share(ReportResult report) {
-    return Printing.sharePdf(
-      bytes: report.bytes,
-      filename: report.filename,
-    );
+    return Printing.sharePdf(bytes: report.bytes, filename: report.filename);
   }
 
   static Future<void> printReport(ReportResult report) {
@@ -148,272 +151,239 @@ class ReportService {
         pageFormat: PdfPageFormat.a4,
         margin: pw.EdgeInsets.zero,
         build: (_) => pw.SizedBox.expand(
-          child: pw.Image(
-            pw.MemoryImage(image),
-            fit: pw.BoxFit.fill,
-          ),
+          child: pw.Image(pw.MemoryImage(image), fit: pw.BoxFit.fill),
         ),
       ),
     );
   }
 
-  static Future<Uint8List> _renderDefectsPage(
+  static Future<Uint8List> _renderTablePage(
+    Site site,
+    Audit audit,
     List<Defect> defects,
-    Map<int, List<AuditPhoto>> photos,
-  ) async {
+    Map<int, List<AuditPhoto>> photos, {
+    required int pageNo,
+    required int pageCount,
+    required int totalDefects,
+  }) async {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder, const Rect.fromLTWH(0, 0, _w, _h));
     _background(canvas);
 
+    _text(
+      canvas,
+      'Raport po audycie urządzeń chłodniczych',
+      const Rect.fromLTWH(_m, 52, _w - 2 * _m, 55),
+      size: 34,
+      weight: FontWeight.w700,
+      color: const Color(0xFF17283A),
+    );
+
+    var y = 118.0;
+    y = _metaLine(canvas, y, 'Obiekt:', site.name);
+    if (site.code.trim().isNotEmpty) {
+      y = _metaLine(canvas, y, 'Kod obiektu:', site.code);
+    }
+    if (site.address.trim().isNotEmpty) {
+      y = _metaLine(canvas, y, 'Adres:', site.address);
+    }
+    y = _metaLine(canvas, y, 'Audytor:', audit.auditor);
+    y = _metaLine(canvas, y, 'Data:', _dateTime.format(audit.startedAt));
+    y = _metaLine(canvas, y, 'Liczba usterek:', '$totalDefects');
+
+    // Prawidłowa łączna liczba jest pokazywana w nagłówku stopki stron tabeli.
+    final tableTop = 330.0;
+    const headerH = 58.0;
+    final tableW = _w - 2 * _m;
+
+    const lpW = 62.0;
+    const posW = 145.0;
+    const devW = 215.0;
+    const descW = 360.0;
+    final photoW = tableW - lpW - posW - devW - descW;
+
+    final widths = <double>[lpW, posW, devW, descW, photoW];
+    final labels = <String>['Lp.', 'Pozycja', 'Nazwa urządzenia', 'Opis usterki', 'Zdjęcia'];
+
     canvas.drawRect(
-      const Rect.fromLTWH(0, 0, _w, 104),
-      Paint()..color = const Color(0xFF16324F),
+      Rect.fromLTWH(_m, tableTop, tableW, headerH),
+      Paint()..color = const Color(0xFF17283A),
     );
 
-    _text(
-      canvas,
-      'USTERKI',
-      const Rect.fromLTWH(_m, 29, 600, 48),
-      size: 32,
-      weight: FontWeight.w700,
-      color: Colors.white,
-    );
-
-    const top = 126.0;
-    const gap = 16.0;
-    final bottom = _h - 82;
-    final cardH = (bottom - top - gap * 3) / 4;
-    final cardW = _w - 2 * _m;
-
-    for (var i = 0; i < defects.length; i++) {
-      final defect = defects[i];
-      final rect = Rect.fromLTWH(
-        _m,
-        top + i * (cardH + gap),
-        cardW,
-        cardH,
-      );
-
-      final all = photos[defect.id] ?? const <AuditPhoto>[];
-      final issue = all.where((x) => x.isIssue).toList();
-      final nameplate = all.where((x) => x.isNameplate).toList();
-      final resolution = all.where((x) => x.isResolution).toList();
-
-      ui.Image? issueImage;
-      ui.Image? nameplateImage;
-      final resolutionImages = <ui.Image>[];
-
-      try {
-        if (issue.isNotEmpty) {
-          issueImage = await _loadThumbnail(issue.first.path);
-        }
-      } catch (_) {}
-
-      try {
-        if (nameplate.isNotEmpty) {
-          nameplateImage = await _loadThumbnail(nameplate.first.path);
-        }
-      } catch (_) {}
-
-      for (final photo in resolution.take(4)) {
-        try {
-          resolutionImages.add(await _loadThumbnail(photo.path));
-        } catch (_) {}
-      }
-
-      _drawDefectCard(
-        canvas,
-        rect,
-        defect,
-        issue: issueImage,
-        nameplate: nameplateImage,
-        resolutions: resolutionImages,
-        resolutionCount: resolution.length,
-      );
-
-      issueImage?.dispose();
-      nameplateImage?.dispose();
-      for (final image in resolutionImages) {
-        image.dispose();
-      }
-    }
-
-    _footer(
-      canvas,
-      '4 usterki na stronie • zdjęcia zachowują proporcje • wszystkie zdjęcia znajdują się w dalszej części PDF/paczce audytu',
-    );
-
-    return _pictureToJpeg(recorder, quality: 68);
-  }
-
-  static void _drawDefectCard(
-    Canvas canvas,
-    Rect r,
-    Defect defect, {
-    ui.Image? issue,
-    ui.Image? nameplate,
-    required List<ui.Image> resolutions,
-    required int resolutionCount,
-  }) {
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(r, const Radius.circular(14)),
-      Paint()..color = const Color(0xFFF7F9FB),
-    );
-
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(r, const Radius.circular(14)),
-      Paint()
-        ..color = const Color(0xFFDDE4EB)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2,
-    );
-
-    final priorityColor = switch (defect.priority) {
-      'Krytyczny' => const Color(0xFFB42318),
-      'Wysoki' => const Color(0xFFD97706),
-      'Niski' => const Color(0xFF2E7D32),
-      _ => const Color(0xFF2D7DD2),
-    };
-
-    _text(
-      canvas,
-      'Poz. ${defect.positionNo}',
-      Rect.fromLTWH(r.left + 14, r.top + 11, 220, 30),
-      size: 20,
-      weight: FontWeight.w700,
-    );
-
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(r.right - 142, r.top + 9, 128, 30),
-        const Radius.circular(15),
-      ),
-      Paint()..color = priorityColor,
-    );
-
-    _text(
-      canvas,
-      defect.priority,
-      Rect.fromLTWH(r.right - 138, r.top + 14, 120, 20),
-      size: 12,
-      weight: FontWeight.w700,
-      color: Colors.white,
-      align: TextAlign.center,
-    );
-
-    final photoTop = r.top + 48;
-    const photoH = 150.0;
-    const gap = 8.0;
-    final available = r.width - 28;
-    const cells = 6;
-    final cellW = (available - gap * (cells - 1)) / cells;
-
-    var x = r.left + 14;
-
-    _photo(
-      canvas,
-      issue,
-      Rect.fromLTWH(x, photoTop, cellW, photoH),
-      'USTERKA',
-    );
-    x += cellW + gap;
-
-    final plateLabel = nameplate != null
-        ? 'TABLICZKA'
-        : defect.nameplateUnavailable
-            ? 'BRAK TABLICZKI'
-            : 'TABLICZKA - BRAK ZDJ.';
-
-    _photo(
-      canvas,
-      nameplate,
-      Rect.fromLTWH(x, photoTop, cellW, photoH),
-      plateLabel,
-    );
-    x += cellW + gap;
-
-    for (var i = 0; i < 4; i++) {
-      final image = i < resolutions.length ? resolutions[i] : null;
-      _photo(
-        canvas,
-        image,
-        Rect.fromLTWH(x, photoTop, cellW, photoH),
-        image == null ? '—' : 'PO NAPRAWIE',
-      );
-      x += cellW + gap;
-    }
-
-    if (resolutionCount > 4) {
+    var x = _m;
+    for (var i = 0; i < labels.length; i++) {
       _text(
         canvas,
-        '+${resolutionCount - 4} dalszych',
-        Rect.fromLTWH(r.right - 170, photoTop + 7, 155, 24),
-        size: 13,
+        labels[i],
+        Rect.fromLTWH(x + 7, tableTop + 15, widths[i] - 14, 32),
+        size: 15,
         weight: FontWeight.w700,
-        color: const Color(0xFF16324F),
-        align: TextAlign.right,
-      );
-    }
-
-    var y = photoTop + photoH + 9;
-
-    if (defect.location.trim().isNotEmpty) {
-      _text(
-        canvas,
-        'Lokalizacja: ${defect.location}',
-        Rect.fromLTWH(r.left + 14, y, r.width - 28, 23),
-        size: 13,
-        weight: FontWeight.w600,
-        maxLines: 1,
-      );
-      y += 23;
-    }
-
-    _text(
-      canvas,
-      defect.description,
-      Rect.fromLTWH(r.left + 14, y, r.width - 28, 45),
-      size: 14,
-      color: const Color(0xFF24364A),
-      maxLines: 2,
-    );
-    y += 47;
-
-    final status = defect.isResolved ? 'USUNIĘTA' : 'DO USUNIĘCIA';
-    final statusColor = defect.isResolved
-        ? const Color(0xFF2E7D32)
-        : const Color(0xFFB42318);
-
-    _text(
-      canvas,
-      status,
-      Rect.fromLTWH(r.left + 14, y, 150, 22),
-      size: 13,
-      weight: FontWeight.w700,
-      color: statusColor,
-    );
-
-    if (defect.isResolved && defect.resolvedAt != null) {
-      _text(
-        canvas,
-        'Data: ${_dateTime.format(defect.resolvedAt!)}',
-        Rect.fromLTWH(r.left + 170, y, 265, 22),
-        size: 12,
-        color: const Color(0xFF526579),
-      );
-    }
-
-    if (defect.isResolved && defect.resolutionNote.trim().isNotEmpty) {
-      _text(
-        canvas,
-        'Komentarz: ${defect.resolutionNote}',
-        Rect.fromLTWH(r.left + 440, y, r.width - 454, 38),
-        size: 12,
-        color: const Color(0xFF526579),
+        color: Colors.white,
+        align: i == 0 ? TextAlign.center : TextAlign.left,
         maxLines: 2,
       );
+      x += widths[i];
     }
+
+    final availableH = _h - tableTop - headerH - 94;
+    final rowH = availableH / 4;
+
+    for (var row = 0; row < 4; row++) {
+      final rowTop = tableTop + headerH + row * rowH;
+      final rowRect = Rect.fromLTWH(_m, rowTop, tableW, rowH);
+      canvas.drawRect(
+        rowRect,
+        Paint()
+          ..color = row.isEven ? Colors.white : const Color(0xFFF7F9FB),
+      );
+      canvas.drawRect(
+        rowRect,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.1
+          ..color = const Color(0xFFBFC8D2),
+      );
+
+      var lineX = _m;
+      for (final width in widths.take(widths.length - 1)) {
+        lineX += width;
+        canvas.drawLine(
+          Offset(lineX, rowTop),
+          Offset(lineX, rowTop + rowH),
+          Paint()
+            ..strokeWidth = 1
+            ..color = const Color(0xFFCAD2DA),
+        );
+      }
+
+      if (row >= defects.length) continue;
+      final defect = defects[row];
+      final all = photos[defect.id] ?? const <AuditPhoto>[];
+
+      x = _m;
+      _text(
+        canvas,
+        defect.positionNo,
+        Rect.fromLTWH(x + 5, rowTop + 14, lpW - 10, 40),
+        size: 15,
+        align: TextAlign.center,
+      );
+      x += lpW;
+
+      _text(
+        canvas,
+        defect.positionNo,
+        Rect.fromLTWH(x + 8, rowTop + 14, posW - 16, rowH - 28),
+        size: 15,
+        weight: FontWeight.w600,
+        maxLines: 4,
+      );
+      x += posW;
+
+      _text(
+        canvas,
+        defect.location.trim().isEmpty ? '—' : defect.location,
+        Rect.fromLTWH(x + 8, rowTop + 14, devW - 16, rowH - 28),
+        size: 15,
+        maxLines: 6,
+      );
+      x += devW;
+
+      var desc = defect.description;
+      if (defect.recommendation.trim().isNotEmpty) {
+        desc += '\nZalecenie: ${defect.recommendation}';
+      }
+      if (defect.isResolved) {
+        desc += '\n\nUSUNIĘTA';
+        if (defect.resolvedAt != null) {
+          desc += ' • ${_dateTime.format(defect.resolvedAt!)}';
+        }
+        if (defect.resolutionNote.trim().isNotEmpty) {
+          desc += '\n${defect.resolutionNote}';
+        }
+      }
+
+      _text(
+        canvas,
+        desc,
+        Rect.fromLTWH(x + 8, rowTop + 14, descW - 16, rowH - 28),
+        size: 14,
+        color: const Color(0xFF24364A),
+        maxLines: 10,
+      );
+      x += descW;
+
+      final visible = all.take(4).toList();
+      const gap = 7.0;
+      final cellW = (photoW - 24 - gap) / 2;
+      final cellH = (rowH - 28 - gap) / 2;
+
+      for (var i = 0; i < 4; i++) {
+        final col = i % 2;
+        final rr = i ~/ 2;
+        final rect = Rect.fromLTWH(
+          x + 8 + col * (cellW + gap),
+          rowTop + 10 + rr * (cellH + gap),
+          cellW,
+          cellH,
+        );
+
+        if (i >= visible.length) {
+          _photo(canvas, null, rect, i == 0 ? 'BRAK' : '');
+          continue;
+        }
+
+        final photo = visible[i];
+        ui.Image? image;
+        try {
+          image = await _loadThumbnail(photo.path, width: 360);
+        } catch (_) {}
+        _photo(canvas, image, rect, _photoLabel(photo));
+        image?.dispose();
+      }
+
+      if (all.length > 4) {
+        _text(
+          canvas,
+          '+${all.length - 4} zdjęć na dalszych stronach',
+          Rect.fromLTWH(x + 10, rowTop + rowH - 25, photoW - 20, 18),
+          size: 10,
+          weight: FontWeight.w700,
+          color: const Color(0xFF16324F),
+          align: TextAlign.center,
+        );
+      }
+    }
+
+    _footer(canvas, 'Strona $pageNo z $pageCount • Audytor 0.8.0');
+    return _pictureToJpeg(recorder, quality: 72);
   }
+
+  static double _metaLine(Canvas canvas, double y, String label, String value) {
+    _text(
+      canvas,
+      label,
+      Rect.fromLTWH(_m, y, 165, 28),
+      size: 16,
+      weight: FontWeight.w700,
+      color: const Color(0xFF24364A),
+    );
+    _text(
+      canvas,
+      value,
+      Rect.fromLTWH(_m + 165, y, _w - 2 * _m - 165, 28),
+      size: 16,
+      color: const Color(0xFF24364A),
+      maxLines: 1,
+    );
+    return y + 31;
+  }
+
+  static String _photoLabel(AuditPhoto photo) => switch (photo.kind) {
+        'resolution' => 'PO NAPRAWIE',
+        'nameplate' => 'TABLICZKA',
+        _ => 'USTERKA',
+      };
 
   static Future<Uint8List> _renderPhotoContinuation(
     Defect defect,
@@ -427,12 +397,11 @@ class ReportService {
 
     canvas.drawRect(
       const Rect.fromLTWH(0, 0, _w, 104),
-      Paint()..color = const Color(0xFF16324F),
+      Paint()..color = const Color(0xFF17283A),
     );
-
     _text(
       canvas,
-      'ZDJĘCIA • Poz. ${defect.positionNo}',
+      'Zdjęcia • pozycja ${defect.positionNo}',
       const Rect.fromLTWH(_m, 29, 900, 48),
       size: 30,
       weight: FontWeight.w700,
@@ -460,38 +429,22 @@ class ReportService {
         image = await _loadThumbnail(photos[i].path, width: 720);
       } catch (_) {}
 
-      final label = switch (photos[i].kind) {
-        'resolution' => 'Po naprawie',
-        'nameplate' => 'Tabliczka znamionowa',
-        _ => 'Usterka',
-      };
-
       _photo(
         canvas,
         image,
         rect,
-        '${startIndex + i + 1}/$total • $label',
+        '${startIndex + i + 1}/$total • ${_photoLabel(photos[i])}',
       );
-
       image?.dispose();
     }
 
-    _footer(
-      canvas,
-      'Dokumentacja zdjęciowa • wszystkie zdjęcia zachowują proporcje',
-    );
-
-    return _pictureToJpeg(recorder, quality: 66);
+    _footer(canvas, 'Pełna dokumentacja zdjęciowa • zachowane proporcje zdjęć');
+    return _pictureToJpeg(recorder, quality: 68);
   }
 
-  static void _photo(
-    Canvas canvas,
-    ui.Image? image,
-    Rect rect,
-    String label,
-  ) {
+  static void _photo(Canvas canvas, ui.Image? image, Rect rect, String label) {
     canvas.drawRRect(
-      RRect.fromRectAndRadius(rect, const Radius.circular(8)),
+      RRect.fromRectAndRadius(rect, const Radius.circular(5)),
       Paint()..color = const Color(0xFFECEFF2),
     );
 
@@ -499,34 +452,30 @@ class ReportService {
       _drawContainedPhoto(canvas, image, rect);
     }
 
-    canvas.drawRect(
-      Rect.fromLTWH(rect.left, rect.bottom - 24, rect.width, 24),
-      Paint()..color = const Color(0x99000000),
-    );
-
-    _text(
-      canvas,
-      label,
-      Rect.fromLTWH(rect.left + 4, rect.bottom - 20, rect.width - 8, 17),
-      size: 9,
-      weight: FontWeight.w700,
-      color: Colors.white,
-      align: TextAlign.center,
-      maxLines: 1,
-    );
+    if (label.isNotEmpty) {
+      canvas.drawRect(
+        Rect.fromLTWH(rect.left, rect.bottom - 20, rect.width, 20),
+        Paint()..color = const Color(0x99000000),
+      );
+      _text(
+        canvas,
+        label,
+        Rect.fromLTWH(rect.left + 3, rect.bottom - 17, rect.width - 6, 14),
+        size: 8,
+        weight: FontWeight.w700,
+        color: Colors.white,
+        align: TextAlign.center,
+        maxLines: 1,
+      );
+    }
   }
 
-  static void _drawContainedPhoto(
-    Canvas canvas,
-    ui.Image image,
-    Rect target,
-  ) {
+  static void _drawContainedPhoto(Canvas canvas, ui.Image image, Rect target) {
     final imageRatio = image.width / image.height;
     final targetRatio = target.width / target.height;
 
     late final double drawW;
     late final double drawH;
-
     if (imageRatio > targetRatio) {
       drawW = target.width;
       drawH = drawW / imageRatio;
@@ -543,130 +492,14 @@ class ReportService {
     );
 
     canvas.save();
-    canvas.clipRRect(
-      RRect.fromRectAndRadius(target, const Radius.circular(8)),
-    );
-
+    canvas.clipRRect(RRect.fromRectAndRadius(target, const Radius.circular(5)));
     canvas.drawImageRect(
       image,
-      Rect.fromLTWH(
-        0,
-        0,
-        image.width.toDouble(),
-        image.height.toDouble(),
-      ),
+      Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
       dst,
       Paint()..filterQuality = FilterQuality.medium,
     );
-
     canvas.restore();
-  }
-
-  static Future<Uint8List> _renderCover(
-    Site site,
-    Audit audit,
-    List<Defect> defects,
-  ) async {
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder, const Rect.fromLTWH(0, 0, _w, _h));
-    _background(canvas);
-
-    canvas.drawRect(
-      const Rect.fromLTWH(0, 0, _w, 250),
-      Paint()..color = const Color(0xFF16324F),
-    );
-
-    _text(
-      canvas,
-      'RAPORT Z AUDYTU',
-      const Rect.fromLTWH(82, 82, 1076, 75),
-      size: 52,
-      weight: FontWeight.w700,
-      color: Colors.white,
-    );
-
-    _text(
-      canvas,
-      audit.auditType,
-      const Rect.fromLTWH(82, 164, 1076, 48),
-      size: 26,
-      color: const Color(0xFFD9E7F5),
-    );
-
-    var y = 340.0;
-
-    y = _labelValue(canvas, y, 'OBIEKT', site.name);
-
-    if (site.code.trim().isNotEmpty) {
-      y = _labelValue(canvas, y, 'NR / KOD OBIEKTU', site.code);
-    }
-
-    if (site.address.trim().isNotEmpty) {
-      y = _labelValue(canvas, y, 'ADRES', site.address);
-    }
-
-    y = _labelValue(
-      canvas,
-      y,
-      'DATA ROZPOCZĘCIA',
-      _dateTime.format(audit.startedAt),
-    );
-
-    if (audit.completedAt != null) {
-      y = _labelValue(
-        canvas,
-        y,
-        'DATA ZAKOŃCZENIA',
-        _dateTime.format(audit.completedAt!),
-      );
-    }
-
-    y = _labelValue(canvas, y, 'AUDYTOR', audit.auditor);
-
-    y += 25;
-
-    _text(
-      canvas,
-      'Usterki: ${defects.length}   •   Usunięte: ${defects.where((d) => d.isResolved).length}',
-      Rect.fromLTWH(82, y, 1076, 55),
-      size: 27,
-      weight: FontWeight.w700,
-    );
-
-    _footer(
-      canvas,
-      'Raport Audytor • układ 1 × 4 • wersja 0.7.0',
-    );
-
-    return _pictureToJpeg(recorder, quality: 70);
-  }
-
-  static double _labelValue(
-    Canvas canvas,
-    double y,
-    String label,
-    String value,
-  ) {
-    _text(
-      canvas,
-      label,
-      Rect.fromLTWH(82, y, 300, 30),
-      size: 17,
-      weight: FontWeight.w700,
-      color: const Color(0xFF6A7A8C),
-    );
-
-    _text(
-      canvas,
-      value,
-      Rect.fromLTWH(82, y + 38, 1076, 70),
-      size: 28,
-      weight: FontWeight.w500,
-      color: const Color(0xFF1B2B3D),
-      maxLines: 2,
-    );
-
-    return y + 118;
   }
 
   static void _background(Canvas canvas) {
@@ -678,18 +511,17 @@ class ReportService {
 
   static void _footer(Canvas canvas, String text) {
     canvas.drawLine(
-      const Offset(_m, _h - 70),
-      const Offset(_w - _m, _h - 70),
+      const Offset(_m, _h - 64),
+      const Offset(_w - _m, _h - 64),
       Paint()
         ..color = const Color(0xFFE1E6EB)
         ..strokeWidth = 2,
     );
-
     _text(
       canvas,
       text,
-      const Rect.fromLTWH(_m, _h - 55, _w - 2 * _m, 30),
-      size: 14,
+      const Rect.fromLTWH(_m, _h - 49, _w - 2 * _m, 26),
+      size: 13,
       color: const Color(0xFF7B8794),
       align: TextAlign.center,
     );
@@ -721,17 +553,10 @@ class ReportService {
       ellipsis: maxLines == null ? null : '…',
       locale: const Locale('pl', 'PL'),
     )..layout(maxWidth: rect.width);
-
-    painter.paint(
-      canvas,
-      Offset(rect.left, rect.top),
-    );
+    painter.paint(canvas, Offset(rect.left, rect.top));
   }
 
-  static Future<ui.Image> _loadThumbnail(
-    String path, {
-    int width = 520,
-  }) async {
+  static Future<ui.Image> _loadThumbnail(String path, {int width = 520}) async {
     final bytes = await File(path).readAsBytes();
     final codec = await ui.instantiateImageCodec(
       bytes,
@@ -745,7 +570,7 @@ class ReportService {
 
   static Future<Uint8List> _pictureToJpeg(
     ui.PictureRecorder recorder, {
-    int quality = 68,
+    int quality = 70,
   }) async {
     final picture = recorder.endRecording();
     final image = await picture.toImage(_w.toInt(), _h.toInt());
@@ -753,25 +578,18 @@ class ReportService {
 
     final data = await image.toByteData(format: ui.ImageByteFormat.png);
     image.dispose();
-
     if (data == null) {
       throw StateError('Nie udało się wyrenderować strony raportu.');
     }
 
     final decoded = img.decodePng(
-      data.buffer.asUint8List(
-        data.offsetInBytes,
-        data.lengthInBytes,
-      ),
+      data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
     );
-
     if (decoded == null) {
       throw StateError('Nie udało się skompresować strony raportu.');
     }
 
-    return Uint8List.fromList(
-      img.encodeJpg(decoded, quality: quality),
-    );
+    return Uint8List.fromList(img.encodeJpg(decoded, quality: quality));
   }
 
   static String _safe(String input) {
