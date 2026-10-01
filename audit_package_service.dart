@@ -23,15 +23,10 @@ class AuditPackagePreview {
   final DateTime startedAt;
   final int defectsCount;
   final int photosCount;
-
   const AuditPackagePreview({
-    required this.syncId,
-    required this.siteName,
-    required this.siteCode,
-    required this.auditType,
-    required this.startedAt,
-    required this.defectsCount,
-    required this.photosCount,
+    required this.syncId, required this.siteName, required this.siteCode,
+    required this.auditType, required this.startedAt,
+    required this.defectsCount, required this.photosCount,
   });
 }
 
@@ -40,14 +35,10 @@ class AuditPackageExportResult {
   final String filename;
   final int sizeBytes;
   final int photosCount;
-
   const AuditPackageExportResult({
-    required this.path,
-    required this.filename,
-    required this.sizeBytes,
-    required this.photosCount,
+    required this.path, required this.filename,
+    required this.sizeBytes, required this.photosCount,
   });
-
   double get sizeMb => sizeBytes / (1024 * 1024);
 }
 
@@ -56,29 +47,20 @@ class AuditPackageImportResult {
   final int siteId;
   final bool updatedExisting;
   final int importedPhotos;
-
   const AuditPackageImportResult({
-    required this.auditId,
-    required this.siteId,
-    required this.updatedExisting,
-    required this.importedPhotos,
+    required this.auditId, required this.siteId,
+    required this.updatedExisting, required this.importedPhotos,
   });
 }
 
 class AuditPackageService {
   static const String _format = 'audytor-audit-package';
-  static const int _formatVersion = 1;
-
-  // Budżet obrazów celowo niższy niż typowy limit załącznika e-mail 20–25 MB.
-  // Zostaje zapas na manifest i narzut ZIP.
-  static const int _emailImageBudgetBytes = 16 * 1024 * 1024;
+  static const int _formatVersion = 2;
+  static const int _emailImageBudgetBytes = 15 * 1024 * 1024;
 
   static Future<String?> pickPackageFile() async {
     final result = await FilePicker.platform.pickFiles(
-      type: FileType.any,
-      allowMultiple: false,
-      withData: false,
-    );
+      type: FileType.any, allowMultiple: false, withData: false);
     return result?.files.single.path;
   }
 
@@ -88,13 +70,10 @@ class AuditPackageService {
     final site = _asMap(manifest['site']);
     final audit = _asMap(manifest['audit']);
     final defects = _asList(manifest['defects']);
-
-    var photos = 0;
-    for (final rawDefect in defects) {
-      final defect = _asMap(rawDefect);
-      photos += _asList(defect['photos']).length;
+    var count = 0;
+    for (final raw in defects) {
+      count += _asList(_asMap(raw)['photos']).length;
     }
-
     return AuditPackagePreview(
       syncId: (audit['sync_id'] as String?) ?? '',
       siteName: (site['name'] as String?) ?? 'Obiekt',
@@ -102,7 +81,7 @@ class AuditPackageService {
       auditType: (audit['audit_type'] as String?) ?? 'Audyt',
       startedAt: DateTime.parse(audit['started_at'] as String),
       defectsCount: defects.length,
-      photosCount: photos,
+      photosCount: count,
     );
   }
 
@@ -112,47 +91,47 @@ class AuditPackageService {
     required List<Defect> defects,
     required Map<int, List<AuditPhoto>> photos,
   }) async {
-    if (audit.id == null) {
-      throw StateError('Audyt nie ma identyfikatora.');
-    }
+    if (audit.id == null) throw StateError('Audyt nie ma identyfikatora.');
 
     final syncId = await DatabaseService.instance.ensureAuditSyncId(audit.id!);
     final archive = Archive();
 
-    final validPhotos = <_SourcePhoto>[];
+    // Raport PDF jest częścią paczki.
+    final report = await ReportService.generate(
+        site: site, audit: audit, defects: defects, photos: photos);
+    archive.addFile(
+        ArchiveFile('RAPORT_AUDYTU.pdf', report.bytes.length, report.bytes));
+
+    final valid = <_SourcePhoto>[];
     for (final defect in defects) {
-      final defectId = defect.id;
-      if (defectId == null) continue;
-      for (final photo in photos[defectId] ?? const <AuditPhoto>[]) {
+      if (defect.id == null) continue;
+      for (final photo in photos[defect.id] ?? const <AuditPhoto>[]) {
         if (await File(photo.path).exists()) {
-          validPhotos.add(_SourcePhoto(defect: defect, photo: photo));
+          valid.add(_SourcePhoto(defect: defect, photo: photo));
         }
       }
     }
 
-    final perPhotoTarget = validPhotos.isEmpty
+    final target = valid.isEmpty
         ? 0
-        : (_emailImageBudgetBytes ~/ validPhotos.length)
-            .clamp(95 * 1024, 350 * 1024)
+        : (_emailImageBudgetBytes ~/ valid.length)
+            .clamp(90 * 1024, 330 * 1024)
             .toInt();
 
-    final photoManifestByDefect = <int, List<Map<String, Object?>>>{};
-    var photoCounter = 0;
-
-    for (final source in validPhotos) {
-      final compressed = await PhotoService.compressForEmailPackage(
-        source.photo.path,
-        targetBytes: perPhotoTarget,
-      );
-      final safePosition = _safe(source.defect.positionNo);
-      final entryName = 'photos/${safePosition}_${photoCounter.toString().padLeft(3, '0')}_${source.photo.kind}.jpg';
-      archive.addFile(ArchiveFile(entryName, compressed.length, compressed));
-      photoManifestByDefect.putIfAbsent(source.defect.id!, () => <Map<String, Object?>>[]).add({
-        'file': entryName,
+    final byDefect = <int, List<Map<String, Object?>>>{};
+    var counter = 0;
+    for (final source in valid) {
+      final bytes = await PhotoService.compressForEmailPackage(
+          source.photo.path, targetBytes: target);
+      final name =
+          'photos/${_safe(source.defect.positionNo)}_${counter.toString().padLeft(3, '0')}_${source.photo.kind}.jpg';
+      archive.addFile(ArchiveFile(name, bytes.length, bytes));
+      byDefect.putIfAbsent(source.defect.id!, () => []).add({
+        'file': name,
         'kind': source.photo.kind,
         'created_at': source.photo.createdAt.toIso8601String(),
       });
-      photoCounter++;
+      counter++;
     }
 
     final manifest = <String, Object?>{
@@ -174,46 +153,31 @@ class AuditPackageService {
         'notes': audit.notes,
         'status': audit.status,
       },
-      'defects': defects.map((defect) => {
-            'position_no': defect.positionNo,
-            'location': defect.location,
-            'description': defect.description,
-            'priority': defect.priority,
-            'recommendation': defect.recommendation,
-            'created_at': defect.createdAt.toIso8601String(),
-            'is_resolved': defect.isResolved,
-            'resolved_at': defect.resolvedAt?.toIso8601String(),
-            'resolution_note': defect.resolutionNote,
-            'photos': photoManifestByDefect[defect.id] ?? const <Map<String, Object?>>[],
-          }).toList(),
+      'defects': defects.map((d) => {
+        'position_no': d.positionNo,
+        'location': d.location,
+        'description': d.description,
+        'priority': d.priority,
+        'recommendation': d.recommendation,
+        'created_at': d.createdAt.toIso8601String(),
+        'is_resolved': d.isResolved,
+        'resolved_at': d.resolvedAt?.toIso8601String(),
+        'resolution_note': d.resolutionNote,
+        'photos': byDefect[d.id] ?? const <Map<String, Object?>>[],
+      }).toList(),
     };
 
-    final report = await ReportService.generate(
-      site: site,
-      audit: audit,
-      defects: defects,
-      photos: photos,
-    );
-    archive.addFile(ArchiveFile(report.filename, report.bytes.length, report.bytes));
+    final manifestBytes =
+        utf8.encode(const JsonEncoder.withIndent('  ').convert(manifest));
+    archive.addFile(
+        ArchiveFile('manifest.json', manifestBytes.length, manifestBytes));
 
-    final html = StringBuffer()
-      ..writeln('<!doctype html><html><head><meta charset="utf-8"><title>Zdjęcia audytu</title></head><body>')
-      ..writeln('<h1>Zdjęcia audytu</h1><p>Kliknij miniaturę, aby otworzyć zdjęcie zapisane w paczce.</p>');
-    for (final item in photoManifestByDefect.entries) {
-      html.writeln('<h2 id="usterka-${item.key}">Usterka</h2>');
-      for (final photo in item.value) {
-        final fileName = photo['file'] as String;
-        html.writeln('<p><a href="$fileName"><img src="$fileName" style="max-width:420px;max-height:300px"></a><br>$fileName</p>');
-      }
-    }
-    html.writeln('</body></html>');
-    final htmlBytes = utf8.encode(html.toString());
+    final html = _buildGallery(site, defects, byDefect);
+    final htmlBytes = utf8.encode(html);
     archive.addFile(ArchiveFile('ZDJECIA.html', htmlBytes.length, htmlBytes));
 
-    final manifestBytes = utf8.encode(const JsonEncoder.withIndent('  ').convert(manifest));
-    archive.addFile(ArchiveFile('manifest.json', manifestBytes.length, manifestBytes));
-
-    const readme = 'Paczka audytu aplikacji Audytor. Zawiera dane audytu, skompresowane zdjęcia, aktualny raport PDF i plik ZDJECIA.html. Otwórz ją w aplikacji przez opcję „Importuj audyt / reaudyt”.';
+    const readme =
+        'Paczka Audytor. RAPORT_AUDYTU.pdf = raport. ZDJECIA.html = galeria wszystkich zdjęć. Folder photos zawiera skompresowane zdjęcia. Paczkę można zaimportować w aplikacji Audytor.';
     final readmeBytes = utf8.encode(readme);
     archive.addFile(ArchiveFile('README.txt', readmeBytes.length, readmeBytes));
 
@@ -223,33 +187,64 @@ class AuditPackageService {
     final docs = await getApplicationDocumentsDirectory();
     final dir = Directory(p.join(docs.path, 'audit_packages'));
     if (!await dir.exists()) await dir.create(recursive: true);
-
-    final stamp = _stamp(audit.startedAt);
-    final filename = 'Audyt_${_safe(site.code.isNotEmpty ? site.code : site.name)}_${stamp}_do_weryfikacji.audyt.zip';
+    final filename =
+        'Audyt_${_safe(site.code.isNotEmpty ? site.code : site.name)}_${_stamp(audit.startedAt)}_do_weryfikacji.audyt.zip';
     final file = File(p.join(dir.path, filename));
     await file.writeAsBytes(encoded, flush: true);
 
     return AuditPackageExportResult(
-      path: file.path,
-      filename: filename,
-      sizeBytes: await file.length(),
-      photosCount: validPhotos.length,
-    );
+      path: file.path, filename: filename,
+      sizeBytes: await file.length(), photosCount: valid.length);
+  }
+
+  static String _buildGallery(
+    Site site,
+    List<Defect> defects,
+    Map<int, List<Map<String, Object?>>> byDefect,
+  ) {
+    String esc(String value) => const HtmlEscape().convert(value);
+    final out = StringBuffer();
+    out.write('<!doctype html><html lang="pl"><head><meta charset="utf-8">');
+    out.write('<meta name="viewport" content="width=device-width,initial-scale=1">');
+    out.write('<title>Zdjęcia audytu</title><style>');
+    out.write('body{font-family:Arial,sans-serif;margin:20px;background:#f4f6f8;color:#182635}');
+    out.write('section{background:#fff;padding:16px;margin:0 0 18px;border-radius:12px}');
+    out.write('.photos{display:flex;flex-wrap:wrap;gap:10px}');
+    out.write('figure{margin:0;width:220px}img{width:220px;height:170px;object-fit:contain;background:#eee;border-radius:8px}');
+    out.write('figcaption{font-size:12px;margin-top:4px;color:#526579}</style></head><body>');
+    out.write('<h1>Zdjęcia audytu – ${esc(site.name)}</h1>');
+    for (final d in defects) {
+      out.write('<section id="usterka-${d.id}"><h2>Pozycja ${esc(d.positionNo)}</h2>');
+      out.write('<p>${esc(d.description)}</p><div class="photos">');
+      for (final ph in byDefect[d.id] ?? const <Map<String, Object?>>[]) {
+        final file = ph['file'] as String;
+        final kind = (ph['kind'] as String?) ?? 'issue';
+        final label = kind == 'resolution'
+            ? 'Po naprawie'
+            : kind == 'nameplate'
+                ? 'Tabliczka znamionowa'
+                : 'Usterka';
+        out.write('<figure><a href="${esc(file)}"><img src="${esc(file)}" alt="${esc(label)}"></a>');
+        out.write('<figcaption>${esc(label)}</figcaption></figure>');
+      }
+      out.write('</div></section>');
+    }
+    out.write('</body></html>');
+    return out.toString();
   }
 
   static Future<AuditPackageImportResult> importPackage(
-    String packagePath, {
-    bool allowUpdateExisting = true,
-  }) async {
+      String packagePath, {bool allowUpdateExisting = true}) async {
     final decoded = await _decodePackage(packagePath);
     final manifest = decoded.manifest;
     final siteMap = _asMap(manifest['site']);
     final auditMap = _asMap(manifest['audit']);
     final defectMaps = _asList(manifest['defects']);
-    final syncId = (auditMap['sync_id'] as String?)?.trim() ?? '';
-    if (syncId.isEmpty) throw const FormatException('Paczka nie zawiera identyfikatora audytu.');
+    final syncId = ((auditMap['sync_id'] as String?) ?? '').trim();
+    if (syncId.isEmpty) throw const FormatException('Brak identyfikatora audytu.');
 
-    final existingAudit = await DatabaseService.instance.getAuditBySyncId(syncId);
+    final existingAudit =
+        await DatabaseService.instance.getAuditBySyncId(syncId);
     if (existingAudit != null && !allowUpdateExisting) {
       throw StateError('Ten audyt już istnieje.');
     }
@@ -259,7 +254,7 @@ class AuditPackageService {
     final updatedExisting = existingAudit != null;
 
     if (existingAudit == null) {
-      final newAudit = Audit(
+      auditId = await DatabaseService.instance.insertAudit(Audit(
         siteId: site.id!,
         auditor: (auditMap['auditor'] as String?) ?? '',
         auditType: (auditMap['audit_type'] as String?) ?? 'Audyt',
@@ -268,32 +263,32 @@ class AuditPackageService {
         notes: (auditMap['notes'] as String?) ?? '',
         status: (auditMap['status'] as String?) ?? 'completed',
         syncId: syncId,
-      );
-      auditId = await DatabaseService.instance.insertAudit(newAudit);
+      ));
     } else {
       auditId = existingAudit.id!;
-      final updated = existingAudit.copyWith(
+      await DatabaseService.instance.updateAudit(existingAudit.copyWith(
         auditor: (auditMap['auditor'] as String?) ?? existingAudit.auditor,
         auditType: (auditMap['audit_type'] as String?) ?? existingAudit.auditType,
         notes: (auditMap['notes'] as String?) ?? existingAudit.notes,
         status: (auditMap['status'] as String?) ?? existingAudit.status,
-        completedAt: _parseDate(auditMap['completed_at']) ?? existingAudit.completedAt,
+        completedAt:
+            _parseDate(auditMap['completed_at']) ?? existingAudit.completedAt,
         syncId: syncId,
-      );
-      await DatabaseService.instance.updateAudit(updated);
+      ));
     }
 
     var importedPhotos = 0;
-    for (final rawDefect in defectMaps) {
-      final map = _asMap(rawDefect);
+    for (final raw in defectMaps) {
+      final map = _asMap(raw);
       final position = (map['position_no'] as String?) ?? '';
       if (position.trim().isEmpty) continue;
 
-      final existingDefect = await DatabaseService.instance.getDefectByPositionNo(auditId, position);
+      final existingDefect = await DatabaseService.instance
+          .getDefectByPositionNo(auditId, position);
       late final int defectId;
 
       if (existingDefect == null) {
-        final defect = Defect(
+        defectId = await DatabaseService.instance.insertDefect(Defect(
           auditId: auditId,
           positionNo: position,
           location: (map['location'] as String?) ?? '',
@@ -304,8 +299,7 @@ class AuditPackageService {
           isResolved: map['is_resolved'] == true,
           resolvedAt: _parseDate(map['resolved_at']),
           resolutionNote: (map['resolution_note'] as String?) ?? '',
-        );
-        defectId = await DatabaseService.instance.insertDefect(defect);
+        ));
       } else {
         defectId = existingDefect.id!;
         await DatabaseService.instance.updateDefectResolutionFromImport(
@@ -317,28 +311,32 @@ class AuditPackageService {
       }
 
       final photoMaps = _asList(map['photos']).map(_asMap).toList();
-      final kinds = <String>{'issue', 'resolution'};
-      for (final kind in kinds) {
-        // Przy aktualizacji istniejącego audytu zachowujemy oryginalne zdjęcia usterki
-        // w pełniejszej jakości. Z paczki zwrotnej podmieniamy tylko potwierdzenia.
-        if (updatedExisting && existingDefect != null && kind == 'issue') continue;
+      for (final kind in <String>{'issue', 'nameplate', 'resolution'}) {
+        if (updatedExisting &&
+            existingDefect != null &&
+            (kind == 'issue' || kind == 'nameplate')) {
+          continue;
+        }
 
-        final oldPhotos = await DatabaseService.instance.getPhotosForDefect(defectId, kind: kind);
-        for (final old in oldPhotos) {
-          await PhotoService.deleteIfExists(old.path);
+        final old = await DatabaseService.instance
+            .getPhotosForDefect(defectId, kind: kind);
+        for (final photo in old) {
+          await PhotoService.deleteIfExists(photo.path);
         }
 
         final paths = <String>[];
-        for (final photoMap in photoMaps.where((m) => (m['kind'] as String?) == kind)) {
+        for (final photoMap
+            in photoMaps.where((x) => (x['kind'] as String?) == kind)) {
           final entryName = photoMap['file'] as String?;
           if (entryName == null) continue;
           final bytes = decoded.entries[entryName];
           if (bytes == null || bytes.isEmpty) continue;
-          final path = await PhotoService.persistBytes(Uint8List.fromList(bytes), prefix: 'import');
-          paths.add(path);
+          paths.add(await PhotoService.persistBytes(
+              Uint8List.fromList(bytes), prefix: 'import'));
           importedPhotos++;
         }
-        await DatabaseService.instance.replacePhotos(defectId, paths, kind: kind);
+        await DatabaseService.instance
+            .replacePhotos(defectId, paths, kind: kind);
       }
     }
 
@@ -350,30 +348,25 @@ class AuditPackageService {
     );
   }
 
-  static Future<Site> _resolveSite(Map<String, Object?> siteMap, int? preferredSiteId) async {
+  static Future<Site> _resolveSite(
+      Map<String, Object?> siteMap, int? preferredSiteId) async {
     if (preferredSiteId != null) {
-      final existing = await DatabaseService.instance.getSiteById(preferredSiteId);
-      if (existing != null) return existing;
+      final site = await DatabaseService.instance.getSiteById(preferredSiteId);
+      if (site != null) return site;
     }
-
     final code = ((siteMap['code'] as String?) ?? '').trim();
     final name = ((siteMap['name'] as String?) ?? 'Obiekt').trim();
     final address = ((siteMap['address'] as String?) ?? '').trim();
     final existing = await DatabaseService.instance.findSiteForImport(
-      code: code,
-      name: name,
-      address: address,
-    );
+        code: code, name: name, address: address);
     if (existing != null) return existing;
 
-    final id = await DatabaseService.instance.insertSite(
-      Site(
-        name: name.isEmpty ? 'Obiekt importowany' : name,
-        address: address,
-        code: code,
-        createdAt: _parseDate(siteMap['created_at']) ?? DateTime.now(),
-      ),
-    );
+    final id = await DatabaseService.instance.insertSite(Site(
+      name: name.isEmpty ? 'Obiekt importowany' : name,
+      address: address,
+      code: code,
+      createdAt: _parseDate(siteMap['created_at']) ?? DateTime.now(),
+    ));
     return (await DatabaseService.instance.getSiteById(id))!;
   }
 
@@ -387,21 +380,25 @@ class AuditPackageService {
       if (!entry.isFile) continue;
       final content = entry.content;
       if (content is List<int>) {
-        entries[entry.name] = content;
-      } else if (content is Uint8List) {
-        entries[entry.name] = content;
+        entries[entry.name] = List<int>.from(content);
       }
     }
+
     final manifestBytes = entries['manifest.json'];
-    if (manifestBytes == null) throw const FormatException('Brak manifestu paczki audytu.');
-    final manifest = jsonDecode(utf8.decode(manifestBytes));
-    if (manifest is! Map) throw const FormatException('Nieprawidłowy manifest paczki.');
-    final normalized = Map<String, Object?>.from(manifest as Map);
-    if (normalized['format'] != _format) throw const FormatException('To nie jest paczka aplikacji Audytor.');
-    if ((normalized['version'] as num?)?.toInt() != _formatVersion) {
+    if (manifestBytes == null) {
+      throw const FormatException('Brak manifestu paczki audytu.');
+    }
+    final raw = jsonDecode(utf8.decode(manifestBytes));
+    if (raw is! Map) throw const FormatException('Nieprawidłowy manifest paczki.');
+    final manifest = Map<String, Object?>.from(raw);
+    if (manifest['format'] != _format) {
+      throw const FormatException('To nie jest paczka aplikacji Audytor.');
+    }
+    final version = (manifest['version'] as num?)?.toInt() ?? 1;
+    if (version < 1 || version > _formatVersion) {
       throw const FormatException('Nieobsługiwana wersja paczki audytu.');
     }
-    return _DecodedPackage(manifest: normalized, entries: entries);
+    return _DecodedPackage(manifest: manifest, entries: entries);
   }
 
   static Map<String, Object?> _asMap(Object? value) {
@@ -426,7 +423,8 @@ class AuditPackageService {
   }
 
   static String _safe(String value) {
-    final cleaned = value.trim().replaceAll(RegExp(r'[^a-zA-Z0-9ąćęłńóśźżĄĆĘŁŃÓŚŹŻ_-]+'), '_');
+    final cleaned = value.trim().replaceAll(
+        RegExp(r'[^a-zA-Z0-9ąćęłńóśźżĄĆĘŁŃÓŚŹŻ_-]+'), '_');
     return cleaned.isEmpty ? 'audyt' : cleaned;
   }
 }
@@ -434,13 +432,11 @@ class AuditPackageService {
 class _DecodedPackage {
   final Map<String, Object?> manifest;
   final Map<String, List<int>> entries;
-
   const _DecodedPackage({required this.manifest, required this.entries});
 }
 
 class _SourcePhoto {
   final Defect defect;
   final AuditPhoto photo;
-
   const _SourcePhoto({required this.defect, required this.photo});
 }

@@ -1,0 +1,21 @@
+AUDYTOR 0.6.4+10 — GOTOWE PLIKI DO PODMIANY
+
+Skopiuj zawartość paczki do katalogu głównego repozytorium, zachowując ścieżki.
+Pliki są PEŁNYMI plikami .dart, nie instrukcjami PATCH.
+
+Podmieniane pliki:
+lib/services/report_service.dart
+lib/services/audit_package_service.dart
+lib/screens/defect_form_screen.dart
+lib/models/audit_photo.dart
+pubspec.yaml
+
+Zmiany:
+- raport PDF 1×4 (4 usterki pionowo na A4)
+- zachowanie proporcji zdjęć
+- do 4 zdjęć po naprawie na karcie (+N dla kolejnych)
+- obowiązkowa tabliczka znamionowa albo zaznaczenie „Brak tabliczki znamionowej”
+- zdjęcia tabliczki mają kind=nameplate
+- eksport .audyt.zip zawiera RAPORT_AUDYTU.pdf
+- eksport zawiera ZDJECIA.html z klikalnymi miniaturami wszystkich zdjęć
+- import obsługuje issue/nameplate/resolution i paczki v1/v2
