@@ -173,8 +173,10 @@ class ReportService {
                 (overlay) => pw.Positioned(
                   left: overlay.rect.left * sx,
                   top: overlay.rect.top * sy,
-                  width: overlay.rect.width * sx,
-                  height: overlay.rect.height * sy,
+                  right: PdfPageFormat.a4.width -
+                      ((overlay.rect.left + overlay.rect.width) * sx),
+                  bottom: PdfPageFormat.a4.height -
+                      ((overlay.rect.top + overlay.rect.height) * sy),
                   child: pw.Container(
                     alignment: pw.Alignment.center,
                     child: pw.Image(

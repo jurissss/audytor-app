@@ -1,6 +1,6 @@
 # Audytor
 
-Wersja 0.8.1+13.
+Wersja 0.8.1+14.
 
 Najważniejsze funkcje:
 - wyszukiwarka obiektów na ekranie głównym,
@@ -16,3 +16,7 @@ Najważniejsze funkcje:
 - orientacja EXIF zdjęć jest korygowana przed osadzeniem w PDF,
 - bez kolumn SN i IoT,
 - eksport i import paczki audytu.
+
+
+Poprawka build #41:
+- poprawione pozycjonowanie zdjęć w PDF dla pakietu pdf 3.11.x (bez nieobsługiwanych parametrów width/height w pw.Positioned).
