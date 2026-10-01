@@ -1,6 +1,6 @@
 # Audytor
 
-Wersja 0.8.3+16.
+Wersja 0.8.4+17.
 
 Najważniejsze funkcje:
 - wyszukiwarka obiektów na ekranie głównym,
@@ -40,3 +40,12 @@ Poprawka build #41:
 - rzeczywisty rozmiar PDF jest sprawdzany po wygenerowaniu,
 - gdy część przekracza limit, ostatnia usterka przechodzi do następnego PDF,
 - przy kilku częściach aplikacja pozwala udostępnić wszystkie PDF-y jednocześnie.
+
+
+## 0.8.4+17 – szybsze generowanie PDF
+- kompresja zdjęcia wykonywana tylko raz na generowanie raportu,
+- miniatura i duża wersja zdjęcia są cache'owane w pamięci,
+- przygotowanie zdjęć odbywa się równolegle w 3 workerach,
+- planowanie podziału 23 MB korzysta z rzeczywistych rozmiarów gotowych obrazów,
+- pełny PDF jest zwykle generowany tylko raz na każdą część,
+- normalne robienie zdjęć i zapisywanie usterek nie wykonuje dodatkowej pracy.
