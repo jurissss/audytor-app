@@ -33,7 +33,13 @@ jobs:
         shell: bash
         run: |
           SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+<<<<<<< HEAD
           SDKMANAGER=""
+=======
+
+          SDKMANAGER=""
+
+>>>>>>> 90b06451efc483d1dae4d701a2a1dc271b3357c5
           for candidate in \
             "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
             "$SDK_ROOT/cmdline-tools/16.0/bin/sdkmanager" \
@@ -44,14 +50,28 @@ jobs:
               break
             fi
           done
+<<<<<<< HEAD
           if [ -z "$SDKMANAGER" ]; then
             SDKMANAGER="$(find "$SDK_ROOT" -type f -name sdkmanager -perm -111 2>/dev/null | head -n 1 || true)"
           fi
+=======
+
+          if [ -z "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "$SDK_ROOT" -type f -name sdkmanager -perm -111 2>/dev/null | head -n 1 || true)"
+          fi
+
+>>>>>>> 90b06451efc483d1dae4d701a2a1dc271b3357c5
           if [ -z "$SDKMANAGER" ]; then
             echo "sdkmanager not found"
             exit 1
           fi
+<<<<<<< HEAD
           yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+=======
+
+          yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+
+>>>>>>> 90b06451efc483d1dae4d701a2a1dc271b3357c5
           "$SDKMANAGER" \
             "platform-tools" \
             "platforms;android-36" \
@@ -69,7 +89,12 @@ jobs:
 
       - name: Remove generated default test
         shell: bash
+<<<<<<< HEAD
         run: rm -f test/widget_test.dart
+=======
+        run: |
+          rm -f test/widget_test.dart
+>>>>>>> 90b06451efc483d1dae4d701a2a1dc271b3357c5
 
       - name: Install dependencies
         run: flutter pub get
@@ -82,9 +107,18 @@ jobs:
           import re
 
           files = []
+<<<<<<< HEAD
           files += list(Path("android").rglob("build.gradle"))
           files += list(Path("android").rglob("build.gradle.kts"))
           cache = Path.home() / ".pub-cache"
+=======
+
+          files += list(Path("android").rglob("build.gradle"))
+          files += list(Path("android").rglob("build.gradle.kts"))
+
+          cache = Path.home() / ".pub-cache"
+
+>>>>>>> 90b06451efc483d1dae4d701a2a1dc271b3357c5
           if cache.exists():
               files += list(cache.rglob("android/build.gradle"))
               files += list(cache.rglob("android/build.gradle.kts"))
@@ -94,6 +128,7 @@ jobs:
                   s = p.read_text(encoding="utf-8")
               except Exception:
                   continue
+<<<<<<< HEAD
               old = s
               s = s.replace("compileSdk = flutter.compileSdkVersion", "compileSdk = 36")
               s = s.replace("compileSdkVersion flutter.compileSdkVersion", "compileSdkVersion 36")
@@ -103,6 +138,43 @@ jobs:
               if s != old:
                   p.write_text(s, encoding="utf-8")
                   print("PATCHED:", p)
+=======
+
+              old = s
+
+              s = s.replace(
+                  "compileSdk = flutter.compileSdkVersion",
+                  "compileSdk = 36"
+              )
+
+              s = s.replace(
+                  "compileSdkVersion flutter.compileSdkVersion",
+                  "compileSdkVersion 36"
+              )
+
+              s = re.sub(
+                  r"\bcompileSdkVersion\s+[0-9]+\b",
+                  "compileSdkVersion 36",
+                  s
+              )
+
+              s = re.sub(
+                  r"\bcompileSdk\s*=\s*[0-9]+\b",
+                  "compileSdk = 36",
+                  s
+              )
+
+              s = re.sub(
+                  r"\bcompileSdk\s+[0-9]+\b",
+                  "compileSdk 36",
+                  s
+              )
+
+              if s != old:
+                  p.write_text(s, encoding="utf-8")
+                  print("PATCHED:", p)
+
+>>>>>>> 90b06451efc483d1dae4d701a2a1dc271b3357c5
           PY
 
       - name: Flutter analyze
@@ -114,7 +186,12 @@ jobs:
       - name: Verify APK
         shell: bash
         run: |
+          echo "=============================="
+          echo "APK RESULT"
+          echo "=============================="
+
           ls -lh build/app/outputs/flutter-apk/
+
           test -f build/app/outputs/flutter-apk/app-release.apk
 
       - name: Upload APK
