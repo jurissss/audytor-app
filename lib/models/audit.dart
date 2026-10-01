@@ -1,6 +1,8 @@
 class Audit {
   final int? id;
-  final int siteId;
+  final String client;
+  final String storeNumber;
+  final String address;
   final String auditor;
   final String auditType;
   final DateTime startedAt;
@@ -11,13 +13,15 @@ class Audit {
 
   const Audit({
     this.id,
-    required this.siteId,
+    required this.client,
+    required this.storeNumber,
+    required this.address,
     required this.auditor,
-    required this.auditType,
+    this.auditType = 'Audyt techniczny',
     required this.startedAt,
     this.completedAt,
-    required this.notes,
-    required this.status,
+    this.notes = '',
+    this.status = 'draft',
     this.syncId = '',
   });
 
@@ -25,7 +29,9 @@ class Audit {
 
   Audit copyWith({
     int? id,
-    int? siteId,
+    String? client,
+    String? storeNumber,
+    String? address,
     String? auditor,
     String? auditType,
     DateTime? startedAt,
@@ -36,7 +42,9 @@ class Audit {
   }) {
     return Audit(
       id: id ?? this.id,
-      siteId: siteId ?? this.siteId,
+      client: client ?? this.client,
+      storeNumber: storeNumber ?? this.storeNumber,
+      address: address ?? this.address,
       auditor: auditor ?? this.auditor,
       auditType: auditType ?? this.auditType,
       startedAt: startedAt ?? this.startedAt,
@@ -49,7 +57,9 @@ class Audit {
 
   Map<String, Object?> toMap() => {
         'id': id,
-        'site_id': siteId,
+        'client': client,
+        'store_number': storeNumber,
+        'address': address,
         'auditor': auditor,
         'audit_type': auditType,
         'started_at': startedAt.toIso8601String(),
@@ -61,9 +71,11 @@ class Audit {
 
   factory Audit.fromMap(Map<String, Object?> map) => Audit(
         id: map['id'] as int?,
-        siteId: map['site_id'] as int,
-        auditor: map['auditor'] as String,
-        auditType: map['audit_type'] as String,
+        client: (map['client'] as String?) ?? '',
+        storeNumber: (map['store_number'] as String?) ?? '',
+        address: (map['address'] as String?) ?? '',
+        auditor: (map['auditor'] as String?) ?? '',
+        auditType: (map['audit_type'] as String?) ?? 'Audyt techniczny',
         startedAt: DateTime.parse(map['started_at'] as String),
         completedAt: map['completed_at'] == null
             ? null

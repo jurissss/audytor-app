@@ -8,22 +8,21 @@ import 'package:share_plus/share_plus.dart';
 import '../models/audit.dart';
 import '../models/audit_photo.dart';
 import '../models/defect.dart';
-import '../models/site.dart';
+import '../models/defect_note.dart';
 import '../services/audit_package_service.dart';
 import '../services/database_service.dart';
 import '../services/photo_service.dart';
 import '../services/report_service.dart';
 import 'defect_form_screen.dart';
+import 'defect_note_screen.dart';
 import 'defect_resolution_screen.dart';
 import 'photo_viewer_screen.dart';
 
 class AuditScreen extends StatefulWidget {
-  final Site site;
   final Audit audit;
 
   const AuditScreen({
     super.key,
-    required this.site,
     required this.audit,
   });
 
@@ -36,9 +35,9 @@ class _AuditScreenState extends State<AuditScreen> {
   bool _loading = true;
   bool _generating = false;
   bool _exporting = false;
-
   List<Defect> _defects = [];
   final Map<int, List<AuditPhoto>> _photos = {};
+  final Map<int, List<DefectNote>> _notes = {};
 
   @override
   void initState() {
@@ -48,31 +47,28 @@ class _AuditScreenState extends State<AuditScreen> {
   }
 
   Future<void> _load() async {
-    final freshAudit =
-        await DatabaseService.instance.getAuditById(_audit.id!);
-    final defects =
-        await DatabaseService.instance.getDefectsForAudit(_audit.id!);
-    final photos =
-        await DatabaseService.instance.getPhotosForDefects(defects);
+    final freshAudit = await DatabaseService.instance.getAuditById(_audit.id!);
+    final defects = await DatabaseService.instance.getDefectsForAudit(_audit.id!);
+    final photos = await DatabaseService.instance.getPhotosForDefects(defects);
+    final notes = await DatabaseService.instance.getNotesForDefects(defects);
 
     if (!mounted) return;
-
     setState(() {
       if (freshAudit != null) _audit = freshAudit;
       _defects = defects;
       _photos
         ..clear()
         ..addAll(photos);
+      _notes
+        ..clear()
+        ..addAll(notes);
       _loading = false;
     });
   }
 
   Future<void> _addDefect() async {
-    final next =
-        await DatabaseService.instance.getNextPositionNo(_audit.id!);
-
+    final next = await DatabaseService.instance.getNextPositionNo(_audit.id!);
     if (!mounted) return;
-
     final changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => DefectFormScreen(
@@ -81,7 +77,6 @@ class _AuditScreenState extends State<AuditScreen> {
         ),
       ),
     );
-
     if (changed == true) await _load();
   }
 
@@ -92,80 +87,18 @@ class _AuditScreenState extends State<AuditScreen> {
           auditId: _audit.id!,
           suggestedPosition: defect.positionNo,
           defect: defect,
-          initialPhotos:
-              _photos[defect.id] ?? const <AuditPhoto>[],
+          initialPhotos: _photos[defect.id] ?? const <AuditPhoto>[],
         ),
       ),
     );
-
     if (changed == true) await _load();
   }
 
-  Future<void> _deleteDefect(Defect defect) async {
-    final yes = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text(
-          'Usunąć pozycję ${defect.positionNo}?',
-        ),
-        content: const Text(
-          'Usterka i cała jej dokumentacja zdjęciowa zostaną trwale usunięte.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Anuluj'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Usuń'),
-          ),
-        ],
-      ),
+  Future<void> _addNote(Defect defect) async {
+    final changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => DefectNoteScreen(defect: defect)),
     );
-
-    if (yes != true) return;
-
-    for (final photo
-        in _photos[defect.id] ?? const <AuditPhoto>[]) {
-      await PhotoService.deleteIfExists(photo.path);
-    }
-
-    await DatabaseService.instance.deleteDefect(defect.id!);
-    await _load();
-  }
-
-  Future<void> _complete() async {
-    final yes = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Zakończyć audyt?'),
-        content: Text(
-          'Audyt zawiera ${_defects.length} usterek. Po zakończeniu można nadal generować raport oraz potwierdzać usunięcie usterek.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Anuluj'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Zakończ'),
-          ),
-        ],
-      ),
-    );
-
-    if (yes != true) return;
-
-    await DatabaseService.instance.updateAudit(
-      _audit.copyWith(
-        status: 'completed',
-        completedAt: DateTime.now(),
-      ),
-    );
-
-    await _load();
+    if (changed == true) await _load();
   }
 
   Future<void> _confirmResolution(Defect defect) async {
@@ -173,12 +106,10 @@ class _AuditScreenState extends State<AuditScreen> {
       MaterialPageRoute(
         builder: (_) => DefectResolutionScreen(
           defect: defect,
-          initialPhotos:
-              _photos[defect.id] ?? const <AuditPhoto>[],
+          initialPhotos: _photos[defect.id] ?? const <AuditPhoto>[],
         ),
       ),
     );
-
     if (changed == true) await _load();
   }
 
@@ -186,11 +117,9 @@ class _AuditScreenState extends State<AuditScreen> {
     final yes = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text(
-          'Cofnąć potwierdzenie usunięcia?',
-        ),
+        title: const Text('Cofnąć potwierdzenie usunięcia?'),
         content: const Text(
-          'Data, komentarz i zdjęcia po naprawie zostaną usunięte.',
+          'Data, komentarz i zdjęcia po naprawie zostaną usunięte. Historia uwag pozostanie.',
         ),
         actions: [
           TextButton(
@@ -207,10 +136,9 @@ class _AuditScreenState extends State<AuditScreen> {
 
     if (yes != true) return;
 
-    final resolutionPhotos =
-        (_photos[defect.id] ?? const <AuditPhoto>[])
-            .where((x) => x.isResolution)
-            .toList();
+    final resolutionPhotos = (_photos[defect.id] ?? const <AuditPhoto>[])
+        .where((x) => x.isResolution)
+        .toList();
 
     for (final photo in resolutionPhotos) {
       await PhotoService.deleteIfExists(photo.path);
@@ -221,20 +149,17 @@ class _AuditScreenState extends State<AuditScreen> {
       const [],
       kind: 'resolution',
     );
-
-    await DatabaseService.instance
-        .clearDefectResolution(defect.id!);
-
+    await DatabaseService.instance.clearDefectResolution(defect.id!);
     await _load();
   }
 
-  Future<void> _deleteAudit() async {
+  Future<void> _deleteDefect(Defect defect) async {
     final yes = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Usunąć audyt?'),
+        title: Text('Usunąć pozycję ${defect.positionNo}?'),
         content: const Text(
-          'Audyt, wszystkie usterki, potwierdzenia usunięcia i zdjęcia zostaną trwale usunięte.',
+          'Usterka, historia uwag i cała dokumentacja zdjęciowa zostaną trwale usunięte.',
         ),
         actions: [
           TextButton(
@@ -248,18 +173,78 @@ class _AuditScreenState extends State<AuditScreen> {
         ],
       ),
     );
-
     if (yes != true) return;
 
-    final paths =
-        await DatabaseService.instance.getPhotoPathsForAudit(
-      _audit.id!,
-    );
+    for (final photo in _photos[defect.id] ?? const <AuditPhoto>[]) {
+      await PhotoService.deleteIfExists(photo.path);
+    }
+    for (final note in _notes[defect.id] ?? const <DefectNote>[]) {
+      for (final path in note.photoPaths) {
+        await PhotoService.deleteIfExists(path);
+      }
+    }
 
+    await DatabaseService.instance.deleteDefect(defect.id!);
+    await _load();
+  }
+
+  Future<void> _complete() async {
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Zakończyć audyt?'),
+        content: Text(
+          'Audyt zawiera ${_defects.length} usterek. Po zakończeniu można potwierdzać usunięcie oraz dodawać uwagi do nieusuniętych usterek.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Anuluj'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Zakończ'),
+          ),
+        ],
+      ),
+    );
+    if (yes != true) return;
+
+    await DatabaseService.instance.updateAudit(
+      _audit.copyWith(
+        status: 'completed',
+        completedAt: DateTime.now(),
+      ),
+    );
+    await _load();
+  }
+
+  Future<void> _deleteAudit() async {
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Usunąć audyt?'),
+        content: const Text(
+          'Audyt, wszystkie usterki, uwagi i zdjęcia zostaną trwale usunięte.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Anuluj'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Usuń'),
+          ),
+        ],
+      ),
+    );
+    if (yes != true) return;
+
+    final paths = await DatabaseService.instance.getPhotoPathsForAudit(_audit.id!);
     for (final path in paths) {
       await PhotoService.deleteIfExists(path);
     }
-
     await DatabaseService.instance.deleteAudit(_audit.id!);
 
     if (mounted) Navigator.pop(context, true);
@@ -267,68 +252,52 @@ class _AuditScreenState extends State<AuditScreen> {
 
   Future<void> _generateReport() async {
     if (_generating) return;
-
     setState(() => _generating = true);
 
     try {
       final reportBatch = await ReportService.generate(
-        site: widget.site,
         audit: _audit,
         defects: _defects,
         photos: _photos,
+        notes: _notes,
       );
 
       if (!mounted) return;
-
       setState(() => _generating = false);
 
       await showModalBottomSheet<void>(
         context: context,
         showDragHandle: true,
-        builder: (sheetContext) => SafeArea(
+        builder: (_) => SafeArea(
           child: Padding(
-            padding:
-                const EdgeInsets.fromLTRB(16, 0, 16, 22),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 22),
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment:
-                  CrossAxisAlignment.stretch,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
                   reportBatch.isSplit
                       ? 'Raport podzielony na ${reportBatch.parts.length} części'
                       : 'Aktualny raport PDF gotowy',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleLarge
-                      ?.copyWith(
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  reportBatch.isSplit
-                      ? 'Każda część zawiera listę usterek z miniaturami oraz duże zdjęcia tych samych usterek. Limit jednej części to około 23 MB.'
-                      : 'Raport został utworzony na podstawie bieżącego stanu audytu, w tym potwierdzonych napraw.',
-                ),
-                const SizedBox(height: 8),
-                Text(
                   reportBatch.parts
-                      .map((part) =>
-                          '${part.filename} • ${(part.bytes.length / 1024 / 1024).toStringAsFixed(1)} MB')
+                      .map(
+                        (part) =>
+                            '${part.filename} • ${(part.bytes.length / 1024 / 1024).toStringAsFixed(1)} MB',
+                      )
                       .join('\n'),
                 ),
                 const SizedBox(height: 18),
                 FilledButton.icon(
                   onPressed: () async {
                     await Share.shareXFiles(
-                      reportBatch.parts
-                          .map((part) => XFile(part.path))
-                          .toList(),
-                      subject: 'Raport audytu ${widget.site.name}',
-                      text: reportBatch.isSplit
-                          ? 'Raport audytu podzielony na ${reportBatch.parts.length} części.'
-                          : 'Raport audytu.',
+                      reportBatch.parts.map((part) => XFile(part.path)).toList(),
+                      subject: 'Raport audytu ${_audit.client} ${_audit.storeNumber}',
                     );
                   },
                   icon: const Icon(Icons.share_outlined),
@@ -341,25 +310,18 @@ class _AuditScreenState extends State<AuditScreen> {
                 const SizedBox(height: 8),
                 if (reportBatch.parts.length == 1)
                   OutlinedButton.icon(
-                    onPressed: () =>
-                        ReportService.printReport(reportBatch.parts.first),
+                    onPressed: () => ReportService.printReport(reportBatch.parts.first),
                     icon: const Icon(Icons.print_outlined),
-                    label: const Text(
-                      'Drukuj / zapisz jako PDF',
-                    ),
+                    label: const Text('Drukuj / zapisz jako PDF'),
                   )
                 else
                   ...reportBatch.parts.asMap().entries.map(
                     (entry) => Padding(
                       padding: const EdgeInsets.only(bottom: 6),
                       child: OutlinedButton.icon(
-                        onPressed: () => ReportService.printReport(
-                          entry.value,
-                        ),
+                        onPressed: () => ReportService.printReport(entry.value),
                         icon: const Icon(Icons.print_outlined),
-                        label: Text(
-                          'Drukuj część ${entry.key + 1}',
-                        ),
+                        label: Text('Drukuj część ${entry.key + 1}'),
                       ),
                     ),
                   ),
@@ -370,173 +332,86 @@ class _AuditScreenState extends State<AuditScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-
       setState(() => _generating = false);
-
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Nie udało się wygenerować raportu: $e',
-          ),
-        ),
+        SnackBar(content: Text('Nie udało się wygenerować raportu: $e')),
       );
     }
   }
 
   Future<void> _exportPackage() async {
     if (_exporting) return;
-
     setState(() => _exporting = true);
 
     try {
-      final result =
-          await AuditPackageService.exportForEmail(
-        site: widget.site,
+      final result = await AuditPackageService.exportForEmail(
         audit: _audit,
         defects: _defects,
         photos: _photos,
+        notes: _notes,
       );
 
       if (!mounted) return;
-
       setState(() => _exporting = false);
 
-      await showModalBottomSheet<void>(
-        context: context,
-        showDragHandle: true,
-        builder: (sheetContext) => SafeArea(
-          child: Padding(
-            padding:
-                const EdgeInsets.fromLTRB(16, 0, 16, 22),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment:
-                  CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'Paczka audytu gotowa',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleLarge
-                      ?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '${result.photosCount} zdjęć • ${result.sizeMb.toStringAsFixed(1)} MB',
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Paczka zawiera raport PDF, galerię HTML, manifest oraz skompresowane zdjęcia. Może zostać przesłana innemu użytkownikowi Audytora.',
-                ),
-                if (result.sizeMb > 20) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    'Uwaga: paczka przekracza 20 MB. Niektóre skrzynki pocztowe mogą mieć niższy limit.',
-                    style: TextStyle(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .error,
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 18),
-                FilledButton.icon(
-                  onPressed: () async {
-                    await Share.shareXFiles(
-                      [XFile(result.path)],
-                      subject:
-                          'Audyt ${widget.site.name}',
-                      text:
-                          'Paczka audytu do importu w aplikacji Audytor.',
-                    );
-                  },
-                  icon: const Icon(Icons.send_outlined),
-                  label: const Text(
-                    'Wyślij / udostępnij paczkę',
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
+      await Share.shareXFiles(
+        [XFile(result.path)],
+        subject: 'Audyt ${_audit.client} ${_audit.storeNumber}',
+        text: 'Paczka audytu do importu w aplikacji Audytor.',
       );
     } catch (e) {
       if (!mounted) return;
-
       setState(() => _exporting = false);
-
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Nie udało się przygotować paczki: $e',
-          ),
-        ),
+        SnackBar(content: Text('Nie udało się przygotować paczki: $e')),
       );
     }
   }
 
-  Color _priorityColor(
-    String priority,
-    ColorScheme scheme,
-  ) {
-    return switch (priority) {
-      'Krytyczny' => scheme.error,
-      'Wysoki' => Colors.orange.shade800,
-      'Niski' => Colors.green.shade700,
-      _ => scheme.primary,
-    };
+  void _openPhotos(List<AuditPhoto> photos, int index) {
+    if (photos.isEmpty) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PhotoViewerScreen(
+          photos: photos,
+          initialIndex: index,
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final dateFormat = DateFormat('dd.MM.yyyy HH:mm');
-
-    final resolved =
-        _defects.where((x) => x.isResolved).length;
+    final resolved = _defects.where((x) => x.isResolved).length;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Audyt'),
         actions: [
           IconButton(
-            tooltip: 'Generuj aktualny PDF',
-            onPressed:
-                _generating ? null : _generateReport,
+            tooltip: 'Generuj PDF',
+            onPressed: _generating ? null : _generateReport,
             icon: _generating
                 ? const SizedBox.square(
                     dimension: 20,
-                    child:
-                        CircularProgressIndicator(
-                      strokeWidth: 2,
-                    ),
+                    child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Icon(
-                    Icons.picture_as_pdf_outlined,
-                  ),
+                : const Icon(Icons.picture_as_pdf_outlined),
           ),
           IconButton(
-            tooltip:
-                'Eksportuj audyt do wysłania',
-            onPressed:
-                _exporting ? null : _exportPackage,
+            tooltip: 'Eksportuj audyt',
+            onPressed: _exporting ? null : _exportPackage,
             icon: _exporting
                 ? const SizedBox.square(
                     dimension: 20,
-                    child:
-                        CircularProgressIndicator(
-                      strokeWidth: 2,
-                    ),
+                    child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.outbox_outlined),
           ),
           PopupMenuButton<String>(
             onSelected: (value) {
-              if (value == 'delete') {
-                _deleteAudit();
-              }
+              if (value == 'delete') _deleteAudit();
             },
             itemBuilder: (_) => const [
               PopupMenuItem(
@@ -555,447 +430,251 @@ class _AuditScreenState extends State<AuditScreen> {
             )
           : null,
       body: _loading
-          ? const Center(
-              child: CircularProgressIndicator(),
-            )
+          ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _load,
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(
-                  16,
-                  12,
-                  16,
-                  110,
-                ),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 110),
                 children: [
                   Card(
                     child: Padding(
                       padding: const EdgeInsets.all(18),
                       child: Column(
-                        crossAxisAlignment:
-                            CrossAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            widget.site.name,
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleLarge
-                                ?.copyWith(
-                                  fontWeight:
-                                      FontWeight.w700,
+                            _audit.client,
+                            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                  fontWeight: FontWeight.w700,
                                 ),
                           ),
-                          const SizedBox(height: 5),
-                          Text(_audit.auditType),
-                          const SizedBox(height: 5),
+                          const SizedBox(height: 6),
+                          Text('Numer sklepu: ${_audit.storeNumber}'),
+                          Text('Adres: ${_audit.address}'),
+                          Text('Audytor: ${_audit.auditor}'),
+                          Text('Data: ${dateFormat.format(_audit.startedAt)}'),
+                          const SizedBox(height: 8),
                           Text(
-                            '${dateFormat.format(_audit.startedAt)} • ${_audit.auditor}',
-                          ),
-                          const SizedBox(height: 12),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: [
-                              Chip(
-                                label: Text(
-                                  '${_defects.length} usterek',
-                                ),
-                              ),
-                              Chip(
-                                label: Text(
-                                  '$resolved usuniętych',
-                                ),
-                              ),
-                              Chip(
-                                label: Text(
-                                  _audit.isCompleted
-                                      ? 'Audyt zakończony'
-                                      : 'Audyt w trakcie',
-                                ),
-                              ),
-                            ],
+                            '${_defects.length} usterek • $resolved usuniętych',
+                            style: const TextStyle(fontWeight: FontWeight.w600),
                           ),
                           if (!_audit.isCompleted) ...[
-                            const SizedBox(height: 14),
-                            FilledButton.tonalIcon(
+                            const SizedBox(height: 16),
+                            FilledButton.icon(
                               onPressed: _complete,
-                              icon: const Icon(
-                                Icons.check_circle_outline,
-                              ),
-                              label: const Text(
-                                'Zakończ audyt',
-                              ),
+                              icon: const Icon(Icons.check_circle_outline),
+                              label: const Text('Zakończ audyt'),
                             ),
                           ],
                         ],
                       ),
                     ),
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 16),
                   if (_defects.isEmpty)
                     const Card(
                       child: Padding(
-                        padding: EdgeInsets.all(20),
-                        child: Text(
-                          'Brak usterek. Dodaj pierwszą pozycję.',
-                        ),
+                        padding: EdgeInsets.all(18),
+                        child: Text('Brak usterek. Dodaj pierwszą pozycję.'),
                       ),
                     ),
-                  ..._defects.map(
-                    (defect) {
-                      final all = _photos[defect.id] ??
-                          const <AuditPhoto>[];
-                      final issueCount = all
-                          .where((x) => x.isIssue)
-                          .length;
-                      final plateCount = all
-                          .where((x) => x.isNameplate)
-                          .length;
-                      final resolutionCount = all
-                          .where((x) => x.isResolution)
-                          .length;
+                  ..._defects.map((defect) {
+                    final defectPhotos =
+                        _photos[defect.id] ?? const <AuditPhoto>[];
+                    final defectNotes =
+                        _notes[defect.id] ?? const <DefectNote>[];
 
-                      return Padding(
-                        padding:
-                            const EdgeInsets.only(
-                          bottom: 10,
-                        ),
-                        child: Card(
-                          child: Padding(
-                            padding:
-                                const EdgeInsets.all(14),
-                            child: Column(
-                              crossAxisAlignment:
-                                  CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
-                                  children: [
-                                    Expanded(
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(14),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      '${defect.positionNo} • ${defect.location.isEmpty ? 'Usterka' : defect.location}',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                  ),
+                                  if (defect.isResolved)
+                                    const Chip(label: Text('Usunięta')),
+                                  if (!_audit.isCompleted)
+                                    PopupMenuButton<String>(
+                                      onSelected: (value) {
+                                        if (value == 'edit') _editDefect(defect);
+                                        if (value == 'delete') _deleteDefect(defect);
+                                      },
+                                      itemBuilder: (_) => const [
+                                        PopupMenuItem(
+                                          value: 'edit',
+                                          child: Text('Edytuj'),
+                                        ),
+                                        PopupMenuItem(
+                                          value: 'delete',
+                                          child: Text('Usuń'),
+                                        ),
+                                      ],
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Text(defect.description),
+                              if (defect.recommendation.trim().isNotEmpty) ...[
+                                const SizedBox(height: 5),
+                                Text('Zalecenie: ${defect.recommendation}'),
+                              ],
+                              if (defect.isResolved) ...[
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Usunięto: ${defect.resolvedAt == null ? '' : dateFormat.format(defect.resolvedAt!)}\n${defect.resolutionNote}',
+                                  style: TextStyle(
+                                    color: Colors.green.shade800,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                              if (defectPhotos.isNotEmpty) ...[
+                                const SizedBox(height: 12),
+                                SizedBox(
+                                  height: 82,
+                                  child: ListView.separated(
+                                    scrollDirection: Axis.horizontal,
+                                    itemCount: defectPhotos.length,
+                                    separatorBuilder: (_, __) =>
+                                        const SizedBox(width: 8),
+                                    itemBuilder: (_, index) => GestureDetector(
+                                      onTap: () => _openPhotos(defectPhotos, index),
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(10),
+                                        child: Image.file(
+                                          File(defectPhotos[index].path),
+                                          width: 100,
+                                          height: 82,
+                                          fit: BoxFit.cover,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              if (defectNotes.isNotEmpty) ...[
+                                const SizedBox(height: 14),
+                                const Divider(),
+                                Text(
+                                  'Historia uwag (${defectNotes.length})',
+                                  style: const TextStyle(fontWeight: FontWeight.w700),
+                                ),
+                                const SizedBox(height: 6),
+                                ...defectNotes.reversed.map((note) {
+                                  final notePhotos = note.photoPaths
+                                      .map(
+                                        (path) => AuditPhoto(
+                                          defectId: defect.id!,
+                                          path: path,
+                                          createdAt: note.createdAt,
+                                          kind: 'note',
+                                        ),
+                                      )
+                                      .toList();
+
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: 9),
+                                    child: Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFF5F7F9),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
                                       child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment
-                                                .start,
+                                        crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            'Poz. ${defect.positionNo}',
-                                            style: Theme.of(
-                                                    context)
-                                                .textTheme
-                                                .titleMedium
-                                                ?.copyWith(
-                                                  fontWeight:
-                                                      FontWeight
-                                                          .w700,
-                                                ),
-                                          ),
-                                          if (defect.location
-                                              .isNotEmpty)
-                                            Text(
-                                              defect.location,
+                                            dateFormat.format(note.createdAt),
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 12,
                                             ),
+                                          ),
+                                          if (note.text.isNotEmpty) ...[
+                                            const SizedBox(height: 4),
+                                            Text(note.text),
+                                          ],
+                                          if (notePhotos.isNotEmpty) ...[
+                                            const SizedBox(height: 7),
+                                            Wrap(
+                                              spacing: 7,
+                                              runSpacing: 7,
+                                              children: notePhotos.asMap().entries.map((entry) {
+                                                return GestureDetector(
+                                                  onTap: () => _openPhotos(
+                                                    notePhotos,
+                                                    entry.key,
+                                                  ),
+                                                  child: ClipRRect(
+                                                    borderRadius: BorderRadius.circular(8),
+                                                    child: Image.file(
+                                                      File(entry.value.path),
+                                                      width: 72,
+                                                      height: 58,
+                                                      fit: BoxFit.cover,
+                                                    ),
+                                                  ),
+                                                );
+                                              }).toList(),
+                                            ),
+                                          ],
                                         ],
                                       ),
                                     ),
-                                    Container(
-                                      padding:
-                                          const EdgeInsets
-                                              .symmetric(
-                                        horizontal: 10,
-                                        vertical: 6,
-                                      ),
-                                      decoration:
-                                          BoxDecoration(
-                                        color:
-                                            _priorityColor(
-                                          defect.priority,
-                                          scheme,
-                                        ),
-                                        borderRadius:
-                                            BorderRadius
-                                                .circular(
-                                          20,
-                                        ),
-                                      ),
-                                      child: Text(
-                                        defect.priority,
-                                        style:
-                                            const TextStyle(
-                                          color:
-                                              Colors.white,
-                                          fontWeight:
-                                              FontWeight
-                                                  .w700,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 10),
-                                Text(defect.description),
-                                if (defect
-                                    .recommendation
-                                    .isNotEmpty) ...[
-                                  const SizedBox(height: 7),
-                                  Text(
-                                    'Zalecenie: ${defect.recommendation}',
-                                    style:
-                                        const TextStyle(
-                                      color:
-                                          Color(0xFF526579),
-                                    ),
-                                  ),
-                                ],
-                                const SizedBox(height: 10),
-                                Text(
-                                  'Zdjęcia: usterka $issueCount • tabliczka ${defect.nameplateUnavailable ? "brak" : plateCount} • po naprawie $resolutionCount',
-                                  style:
-                                      const TextStyle(
-                                    fontSize: 12,
-                                    color:
-                                        Color(0xFF66788A),
-                                  ),
-                                ),
-                                if (all.isNotEmpty) ...[
-                                  const SizedBox(height: 10),
-                                  SizedBox(
-                                    height: 92,
-                                    child: ListView.separated(
-                                      scrollDirection: Axis.horizontal,
-                                      itemCount: all.length,
-                                      separatorBuilder: (_, __) =>
-                                          const SizedBox(width: 8),
-                                      itemBuilder: (_, photoIndex) {
-                                        final photo = all[photoIndex];
-                                        final label = switch (photo.kind) {
-                                          'nameplate' => 'Tabliczka',
-                                          'resolution' => 'Po naprawie',
-                                          _ => 'Usterka',
-                                        };
-                                        return InkWell(
-                                          borderRadius: BorderRadius.circular(10),
-                                          onTap: () => Navigator.of(context).push(
-                                            MaterialPageRoute(
-                                              builder: (_) => PhotoViewerScreen(
-                                                photos: all,
-                                                initialIndex: photoIndex,
-                                              ),
-                                            ),
-                                          ),
-                                          child: SizedBox(
-                                            width: 112,
-                                            child: ClipRRect(
-                                              borderRadius: BorderRadius.circular(10),
-                                              child: Stack(
-                                                fit: StackFit.expand,
-                                                children: [
-                                                  Image.file(
-                                                    File(photo.path),
-                                                    fit: BoxFit.cover,
-                                                    errorBuilder: (_, __, ___) =>
-                                                        const ColoredBox(
-                                                      color: Color(0xFFE5E9EE),
-                                                      child: Icon(
-                                                        Icons.broken_image_outlined,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                  Align(
-                                                    alignment: Alignment.bottomCenter,
-                                                    child: Container(
-                                                      width: double.infinity,
-                                                      padding: const EdgeInsets.symmetric(
-                                                        horizontal: 4,
-                                                        vertical: 3,
-                                                      ),
-                                                      color: Colors.black54,
-                                                      child: Text(
-                                                        label,
-                                                        textAlign: TextAlign.center,
-                                                        maxLines: 1,
-                                                        overflow: TextOverflow.ellipsis,
-                                                        style: const TextStyle(
-                                                          color: Colors.white,
-                                                          fontSize: 10,
-                                                          fontWeight: FontWeight.w600,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  const Text(
-                                    'Dotknij miniatury, aby otworzyć pełne zdjęcie i powiększać je gestem.',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: Color(0xFF66788A),
-                                    ),
-                                  ),
-                                ],
-                                if (defect.isResolved) ...[
-                                  const SizedBox(height: 10),
-                                  Container(
-                                    width:
-                                        double.infinity,
-                                    padding:
-                                        const EdgeInsets
-                                            .all(12),
-                                    decoration:
-                                        BoxDecoration(
-                                      color:
-                                          Colors.green
-                                              .shade50,
-                                      borderRadius:
-                                          BorderRadius
-                                              .circular(
-                                        12,
-                                      ),
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment
-                                              .start,
-                                      children: [
-                                        Text(
-                                          'USTERKA USUNIĘTA'
-                                          '${defect.resolvedAt != null ? " • ${dateFormat.format(defect.resolvedAt!)}" : ""}',
-                                          style:
-                                              TextStyle(
-                                            fontWeight:
-                                                FontWeight
-                                                    .w700,
-                                            color:
-                                                Colors
-                                                    .green
-                                                    .shade800,
-                                          ),
-                                        ),
-                                        if (defect
-                                            .resolutionNote
-                                            .isNotEmpty)
-                                          Padding(
-                                            padding:
-                                                const EdgeInsets
-                                                    .only(
-                                              top: 5,
-                                            ),
-                                            child: Text(
-                                              defect
-                                                  .resolutionNote,
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
+                                  );
+                                }),
+                              ],
+                              if (_audit.isCompleted) ...[
                                 const SizedBox(height: 12),
                                 Wrap(
                                   spacing: 8,
                                   runSpacing: 8,
                                   children: [
-                                    if (!_audit
-                                        .isCompleted)
-                                      OutlinedButton
-                                          .icon(
-                                        onPressed: () =>
-                                            _editDefect(
-                                          defect,
-                                        ),
-                                        icon: const Icon(
-                                          Icons
-                                              .edit_outlined,
-                                        ),
-                                        label:
-                                            const Text(
-                                          'Edytuj',
-                                        ),
+                                    if (!defect.isResolved)
+                                      FilledButton.tonalIcon(
+                                        onPressed: () => _confirmResolution(defect),
+                                        icon: const Icon(Icons.check_circle_outline),
+                                        label: const Text('Potwierdź usunięcie'),
+                                      )
+                                    else
+                                      FilledButton.tonalIcon(
+                                        onPressed: () => _confirmResolution(defect),
+                                        icon: const Icon(Icons.edit_outlined),
+                                        label: const Text('Edytuj potwierdzenie'),
                                       ),
-                                    if (_audit
-                                            .isCompleted &&
-                                        !defect
-                                            .isResolved)
-                                      FilledButton
-                                          .icon(
-                                        onPressed: () =>
-                                            _confirmResolution(
-                                          defect,
-                                        ),
-                                        icon: const Icon(
-                                          Icons
-                                              .check_circle_outline,
-                                        ),
-                                        label:
-                                            const Text(
-                                          'Potwierdź usunięcie',
-                                        ),
+                                    if (!defect.isResolved)
+                                      OutlinedButton.icon(
+                                        onPressed: () => _addNote(defect),
+                                        icon: const Icon(Icons.note_add_outlined),
+                                        label: const Text('Dodaj uwagę'),
                                       ),
-                                    if (defect
-                                        .isResolved)
-                                      OutlinedButton
-                                          .icon(
-                                        onPressed: () =>
-                                            _confirmResolution(
-                                          defect,
-                                        ),
-                                        icon: const Icon(
-                                          Icons
-                                              .add_a_photo_outlined,
-                                        ),
-                                        label:
-                                            const Text(
-                                          'Edytuj potwierdzenie',
-                                        ),
-                                      ),
-                                    if (defect
-                                        .isResolved)
-                                      OutlinedButton
-                                          .icon(
-                                        onPressed: () =>
-                                            _clearResolution(
-                                          defect,
-                                        ),
-                                        icon: const Icon(
-                                          Icons.undo,
-                                        ),
-                                        label:
-                                            const Text(
-                                          'Cofnij usunięcie',
-                                        ),
-                                      ),
-                                    if (!_audit
-                                        .isCompleted)
-                                      TextButton
-                                          .icon(
-                                        onPressed: () =>
-                                            _deleteDefect(
-                                          defect,
-                                        ),
-                                        icon: const Icon(
-                                          Icons
-                                              .delete_outline,
-                                        ),
-                                        label:
-                                            const Text(
-                                          'Usuń',
-                                        ),
+                                    if (defect.isResolved)
+                                      TextButton(
+                                        onPressed: () => _clearResolution(defect),
+                                        child: const Text('Cofnij usunięcie'),
                                       ),
                                   ],
                                 ),
                               ],
-                            ),
+                            ],
                           ),
                         ),
-                      );
-                    },
-                  ),
+                      ),
+                    );
+                  }),
                 ],
               ),
             ),

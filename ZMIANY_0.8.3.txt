@@ -1,9 +1,0 @@
-Audytor 0.8.3+16
-
-- Dynamiczny limit 23 MB na część raportu PDF.
-- Podział raportu wyłącznie pomiędzy usterkami.
-- W każdej części: lista usterek, miniatury, klikalne odnośniki i duże zdjęcia.
-- Duże zdjęcia celują w ok. 250 kB.
-- Miniatury celują w ok. 48 kB.
-- Rzeczywisty rozmiar każdej części jest sprawdzany po wygenerowaniu.
-- Wszystkie części można udostępnić jednocześnie.

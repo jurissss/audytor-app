@@ -2,12 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../models/audit.dart';
-import '../models/site.dart';
 import '../services/audit_package_service.dart';
 import '../services/database_service.dart';
 import 'audit_screen.dart';
-import 'site_detail_screen.dart';
-import 'site_form_screen.dart';
+import 'audit_setup_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -20,8 +18,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final _search = TextEditingController();
   bool _loading = true;
   bool _importing = false;
-  List<Site> _sites = [];
-  List<_AuditListItem> _audits = [];
+  List<Audit> _audits = [];
 
   @override
   void initState() {
@@ -37,42 +34,29 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _load() async {
-    final sites = await DatabaseService.instance.getSites();
-    final audits = <_AuditListItem>[];
-    for (final site in sites) {
-      if (site.id == null) continue;
-      final rows = await DatabaseService.instance.getAuditsForSite(site.id!);
-      audits.addAll(rows.map((audit) => _AuditListItem(site, audit)));
-    }
-    audits.sort((a, b) => b.audit.startedAt.compareTo(a.audit.startedAt));
-
+    final audits = await DatabaseService.instance.getAudits();
     if (!mounted) return;
     setState(() {
-      _sites = sites;
       _audits = audits;
       _loading = false;
     });
   }
 
-  Future<void> _newSite() async {
-    final changed = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => const SiteFormScreen()),
+  Future<void> _newAudit() async {
+    final audit = await Navigator.of(context).push<Audit>(
+      MaterialPageRoute(builder: (_) => const AuditSetupScreen()),
     );
-    if (changed == true) await _load();
-  }
+    if (audit == null || !mounted) return;
 
-  Future<void> _openSite(Site site) async {
     await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => SiteDetailScreen(site: site)),
+      MaterialPageRoute(builder: (_) => AuditScreen(audit: audit)),
     );
     await _load();
   }
 
-  Future<void> _openAudit(_AuditListItem item) async {
+  Future<void> _openAudit(Audit audit) async {
     await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => AuditScreen(site: item.site, audit: item.audit),
-      ),
+      MaterialPageRoute(builder: (_) => AuditScreen(audit: audit)),
     );
     await _load();
   }
@@ -81,8 +65,8 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_importing) return;
     final path = await AuditPackageService.pickPackageFile();
     if (path == null) return;
-
     setState(() => _importing = true);
+
     try {
       final preview = await AuditPackageService.inspect(path);
       if (!mounted) return;
@@ -92,7 +76,7 @@ class _HomeScreenState extends State<HomeScreen> {
         builder: (_) => AlertDialog(
           title: const Text('Importować audyt?'),
           content: Text(
-            '${preview.siteName}\n${preview.auditType}\n'
+            '${preview.client} • sklep ${preview.storeNumber}\n'
             '${preview.defectsCount} usterek • ${preview.photosCount} zdjęć',
           ),
           actions: [
@@ -139,20 +123,13 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final q = _search.text.trim().toLowerCase();
-    final filteredSites = _sites.where((site) {
+    final visible = _audits.where((audit) {
       if (q.isEmpty) return true;
-      return site.name.toLowerCase().contains(q) ||
-          site.code.toLowerCase().contains(q) ||
-          site.address.toLowerCase().contains(q);
+      return audit.client.toLowerCase().contains(q) ||
+          audit.storeNumber.toLowerCase().contains(q) ||
+          audit.address.toLowerCase().contains(q) ||
+          audit.auditor.toLowerCase().contains(q);
     }).toList();
-
-    final visibleAudits = _audits.where((item) {
-      if (q.isEmpty) return true;
-      return item.site.name.toLowerCase().contains(q) ||
-          item.site.code.toLowerCase().contains(q) ||
-          item.audit.auditType.toLowerCase().contains(q) ||
-          item.audit.auditor.toLowerCase().contains(q);
-    }).take(q.isEmpty ? 8 : 30).toList();
 
     final df = DateFormat('dd.MM.yyyy HH:mm');
 
@@ -173,9 +150,9 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _newSite,
+        onPressed: _newAudit,
         icon: const Icon(Icons.add),
-        label: const Text('Nowy obiekt'),
+        label: const Text('Nowy audyt'),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -187,7 +164,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   TextField(
                     controller: _search,
                     decoration: InputDecoration(
-                      hintText: 'Szukaj obiektu, kodu lub audytu',
+                      hintText: 'Szukaj klienta, numeru sklepu, adresu lub audytora',
                       prefixIcon: const Icon(Icons.search),
                       suffixIcon: q.isEmpty
                           ? null
@@ -202,100 +179,51 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: [
                       Expanded(
                         child: Text(
-                          q.isEmpty ? 'Ostatnie audyty' : 'Znalezione audyty',
+                          q.isEmpty ? 'Audyty' : 'Znalezione audyty',
                           style: Theme.of(context).textTheme.titleLarge?.copyWith(
                                 fontWeight: FontWeight.w700,
                               ),
                         ),
                       ),
-                      Text('${visibleAudits.length}'),
+                      Text('${visible.length}'),
                     ],
                   ),
                   const SizedBox(height: 10),
-                  if (visibleAudits.isEmpty)
+                  if (visible.isEmpty)
                     const Card(
                       child: Padding(
                         padding: EdgeInsets.all(18),
                         child: Text('Brak audytów do wyświetlenia.'),
                       ),
                     ),
-                  ...visibleAudits.map(
-                    (item) => Padding(
+                  ...visible.map(
+                    (audit) => Padding(
                       padding: const EdgeInsets.only(bottom: 9),
                       child: Card(
                         child: ListTile(
                           contentPadding: const EdgeInsets.symmetric(
                             horizontal: 14,
-                            vertical: 8,
+                            vertical: 9,
                           ),
                           leading: CircleAvatar(
                             child: Icon(
-                              item.audit.isCompleted
+                              audit.isCompleted
                                   ? Icons.check_rounded
                                   : Icons.assignment_outlined,
                             ),
                           ),
                           title: Text(
-                            item.site.name,
+                            audit.client,
                             style: const TextStyle(fontWeight: FontWeight.w700),
                           ),
                           subtitle: Text(
-                            '${item.audit.auditType} • ${df.format(item.audit.startedAt)}\n'
-                            '${item.audit.auditor} • ${item.audit.isCompleted ? 'Zakończony' : 'W trakcie'}',
+                            'Sklep ${audit.storeNumber} • ${df.format(audit.startedAt)}\n'
+                            '${audit.address}\n'
+                            'Audytor: ${audit.auditor} • ${audit.isCompleted ? 'Zakończony' : 'W trakcie'}',
                           ),
                           isThreeLine: true,
                           trailing: const Icon(Icons.chevron_right_rounded),
-                          onTap: () => _openAudit(item),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'Obiekty',
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                fontWeight: FontWeight.w700,
-                              ),
-                        ),
-                      ),
-                      Text('${filteredSites.length}'),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  if (filteredSites.isEmpty)
-                    const Card(
-                      child: Padding(
-                        padding: EdgeInsets.all(18),
-                        child: Text('Nie znaleziono obiektów.'),
-                      ),
-                    ),
-                  ...filteredSites.map(
-                    (site) => Padding(
-                      padding: const EdgeInsets.only(bottom: 9),
-                      child: Card(
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 10,
-                          ),
-                          leading: const CircleAvatar(
-                            child: Icon(Icons.apartment_outlined),
-                          ),
-                          title: Text(
-                            site.name,
-                            style: const TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          subtitle: Text(
-                            [
-                              if (site.code.isNotEmpty) site.code,
-                              if (site.address.isNotEmpty) site.address,
-                            ].join(' • '),
-                          ),
-                          trailing: const Icon(Icons.chevron_right_rounded),
-                          onTap: () => _openSite(site),
+                          onTap: () => _openAudit(audit),
                         ),
                       ),
                     ),
@@ -305,11 +233,4 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
     );
   }
-}
-
-class _AuditListItem {
-  final Site site;
-  final Audit audit;
-
-  const _AuditListItem(this.site, this.audit);
 }

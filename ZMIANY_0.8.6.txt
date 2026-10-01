@@ -1,0 +1,29 @@
+Audytor 0.8.6+19
+
+AUDYTY BEZ OBIEKTÓW
+- Klient
+- Numer sklepu
+- Adres
+- Audytor
+- zapamiętywanie ostatniego audytora
+- migracja starych audytów bez utraty danych
+
+PO ZAKOŃCZENIU AUDYTU
+- Potwierdź usunięcie
+- Dodaj uwagę
+- uwaga: tekst i/lub zdjęcia
+- historia wielu uwag z datami
+
+PDF
+- 8 usterek na stronie
+- 5 miniatur w jednej linii
+- historia uwag i zdjęcia uwag
+- Powrót do usterki u góry i na dole dużego zdjęcia
+- dynamiczny limit ok. 23 MB
+- duże zdjęcia ok. 250 kB
+- cache i równoległa kompresja zachowane
+
+EKSPORT / IMPORT
+- format paczki v3
+- obsługa historii uwag i zdjęć
+- zgodność importu ze starszymi paczkami v1/v2

@@ -34,37 +34,33 @@ jobs:
         run: |
           SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
           SDKMANAGER=""
-          for candidate in \
-            "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
-            "$SDK_ROOT/cmdline-tools/16.0/bin/sdkmanager" \
-            "$SDK_ROOT/cmdline-tools/12.0/bin/sdkmanager"
+
+          for candidate in             "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"             "$SDK_ROOT/cmdline-tools/16.0/bin/sdkmanager"             "$SDK_ROOT/cmdline-tools/12.0/bin/sdkmanager"
           do
             if [ -x "$candidate" ]; then
               SDKMANAGER="$candidate"
               break
             fi
           done
+
           if [ -z "$SDKMANAGER" ]; then
             SDKMANAGER="$(find "$SDK_ROOT" -type f -name sdkmanager -perm -111 2>/dev/null | head -n 1 || true)"
           fi
+
           if [ -z "$SDKMANAGER" ]; then
             echo "sdkmanager not found"
             exit 1
           fi
+
           yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
-          "$SDKMANAGER" \
-            "platform-tools" \
-            "platforms;android-36" \
-            "build-tools;36.0.0"
+
+          "$SDKMANAGER"             "platform-tools"             "platforms;android-36"             "build-tools;36.0.0"
 
       - name: Create Android platform
         shell: bash
         run: |
           if [ ! -d android ]; then
-            flutter create \
-              --project-name audytor_app \
-              --platforms=android \
-              .
+            flutter create               --project-name audytor_app               --platforms=android               .
           fi
 
       - name: Remove generated default test
@@ -85,6 +81,7 @@ jobs:
           files += list(Path("android").rglob("build.gradle"))
           files += list(Path("android").rglob("build.gradle.kts"))
           cache = Path.home() / ".pub-cache"
+
           if cache.exists():
               files += list(cache.rglob("android/build.gradle"))
               files += list(cache.rglob("android/build.gradle.kts"))
@@ -94,12 +91,32 @@ jobs:
                   s = p.read_text(encoding="utf-8")
               except Exception:
                   continue
+
               old = s
-              s = s.replace("compileSdk = flutter.compileSdkVersion", "compileSdk = 36")
-              s = s.replace("compileSdkVersion flutter.compileSdkVersion", "compileSdkVersion 36")
-              s = re.sub(r"\bcompileSdkVersion\s+[0-9]+\b", "compileSdkVersion 36", s)
-              s = re.sub(r"\bcompileSdk\s*=\s*[0-9]+\b", "compileSdk = 36", s)
-              s = re.sub(r"\bcompileSdk\s+[0-9]+\b", "compileSdk 36", s)
+              s = s.replace(
+                  "compileSdk = flutter.compileSdkVersion",
+                  "compileSdk = 36"
+              )
+              s = s.replace(
+                  "compileSdkVersion flutter.compileSdkVersion",
+                  "compileSdkVersion 36"
+              )
+              s = re.sub(
+                  r"\bcompileSdkVersion\s+[0-9]+\b",
+                  "compileSdkVersion 36",
+                  s
+              )
+              s = re.sub(
+                  r"\bcompileSdk\s*=\s*[0-9]+\b",
+                  "compileSdk = 36",
+                  s
+              )
+              s = re.sub(
+                  r"\bcompileSdk\s+[0-9]+\b",
+                  "compileSdk 36",
+                  s
+              )
+
               if s != old:
                   p.write_text(s, encoding="utf-8")
                   print("PATCHED:", p)

@@ -1,18 +1,11 @@
 import 'dart:io';
-
 import 'package:flutter/material.dart';
-
 import '../models/audit_photo.dart';
 
 class PhotoViewerScreen extends StatefulWidget {
   final List<AuditPhoto> photos;
   final int initialIndex;
-
-  const PhotoViewerScreen({
-    super.key,
-    required this.photos,
-    this.initialIndex = 0,
-  });
+  const PhotoViewerScreen({super.key, required this.photos, this.initialIndex = 0});
 
   @override
   State<PhotoViewerScreen> createState() => _PhotoViewerScreenState();
@@ -38,6 +31,7 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
   String _label(AuditPhoto photo) => switch (photo.kind) {
         'nameplate' => 'Tabliczka znamionowa',
         'resolution' => 'Po naprawie',
+        'note' => 'Uwaga / stan po audycie',
         _ => 'Usterka',
       };
 
@@ -64,19 +58,14 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
                   File(widget.photos[index].path),
                   fit: BoxFit.contain,
                   errorBuilder: (_, __, ___) => const Center(
-                    child: Text(
-                      'Nie można otworzyć zdjęcia',
-                      style: TextStyle(color: Colors.white),
-                    ),
+                    child: Text('Nie można otworzyć zdjęcia', style: TextStyle(color: Colors.white)),
                   ),
                 ),
               ),
             ),
           ),
           Positioned(
-            left: 16,
-            right: 16,
-            bottom: 20,
+            left: 16, right: 16, bottom: 20,
             child: SafeArea(
               top: false,
               child: Container(
@@ -85,11 +74,7 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
                   color: Colors.black.withValues(alpha: 0.65),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: Text(
-                  _label(widget.photos[_index]),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white),
-                ),
+                child: Text(_label(widget.photos[_index]), textAlign: TextAlign.center, style: const TextStyle(color: Colors.white)),
               ),
             ),
           ),

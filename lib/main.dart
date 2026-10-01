@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-
 import 'screens/home_screen.dart';
 
 void main() {
@@ -16,7 +15,6 @@ class AuditApp extends StatelessWidget {
       seedColor: const Color(0xFF16324F),
       brightness: Brightness.light,
     );
-
     return MaterialApp(
       title: 'Audytor',
       debugShowCheckedModeBanner: false,
