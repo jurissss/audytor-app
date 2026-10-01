@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:cross_file/cross_file.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
@@ -250,6 +251,38 @@ class _AuditScreenState extends State<AuditScreen> {
     if (mounted) Navigator.pop(context, true);
   }
 
+  Future<void> _savePdfToDownloads(ReportResult report) async {
+    try {
+      final savedPath = await FilePicker.platform.saveFile(
+        dialogTitle: 'Zapisz raport PDF w Pobranych',
+        fileName: report.filename,
+        type: FileType.custom,
+        allowedExtensions: const ['pdf'],
+        bytes: report.bytes,
+      );
+
+      if (!mounted || savedPath == null) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'PDF zapisany. W oknie systemowym możesz wybrać folder „Pobrane”.',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Nie udało się zapisać PDF: $e',
+          ),
+        ),
+      );
+    }
+  }
+
   Future<void> _generateReport() async {
     if (_generating) return;
     setState(() => _generating = true);
@@ -308,22 +341,46 @@ class _AuditScreenState extends State<AuditScreen> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                if (reportBatch.parts.length == 1)
-                  OutlinedButton.icon(
-                    onPressed: () => ReportService.printReport(reportBatch.parts.first),
-                    icon: const Icon(Icons.print_outlined),
-                    label: const Text('Drukuj / zapisz jako PDF'),
-                  )
-                else
-                  ...reportBatch.parts.asMap().entries.map(
-                    (entry) => Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: OutlinedButton.icon(
-                        onPressed: () => ReportService.printReport(entry.value),
-                        icon: const Icon(Icons.print_outlined),
-                        label: Text('Drukuj część ${entry.key + 1}'),
-                      ),
+                if (reportBatch.parts.length == 1) ...[
+                  FilledButton.tonalIcon(
+                    onPressed: () => _savePdfToDownloads(
+                      reportBatch.parts.first,
                     ),
+                    icon: const Icon(Icons.download_outlined),
+                    label: const Text('Zapisz PDF w Pobranych'),
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: () => ReportService.printReport(
+                      reportBatch.parts.first,
+                    ),
+                    icon: const Icon(Icons.print_outlined),
+                    label: const Text('Drukuj'),
+                  ),
+                ] else
+                  ...reportBatch.parts.asMap().entries.expand(
+                    (entry) => <Widget>[
+                      FilledButton.tonalIcon(
+                        onPressed: () => _savePdfToDownloads(
+                          entry.value,
+                        ),
+                        icon: const Icon(Icons.download_outlined),
+                        label: Text(
+                          'Zapisz część ${entry.key + 1} w Pobranych',
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      OutlinedButton.icon(
+                        onPressed: () => ReportService.printReport(
+                          entry.value,
+                        ),
+                        icon: const Icon(Icons.print_outlined),
+                        label: Text(
+                          'Drukuj część ${entry.key + 1}',
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
                   ),
               ],
             ),

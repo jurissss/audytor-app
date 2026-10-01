@@ -1,6 +1,6 @@
 # Audytor
 
-Wersja **0.9.0+23**.
+Wersja **0.9.1+24**.
 
 ## Najważniejsze zmiany
 
@@ -46,3 +46,11 @@ Wersja **0.9.0+23**.
 - pole „Opis usterki” zmniejszone mniej więcej o połowę,
 - pole „Zalecenie / sposób naprawy” przemianowane na „Uwagi”,
 - „Uwagi” ograniczone do jednej linii.
+
+## 0.9.1+24 – prawdziwy zapis PDF
+- usunięto mylący przycisk „Drukuj / zapisz jako PDF”,
+- dodano osobny przycisk „Zapisz PDF w Pobranych”,
+- zapis korzysta z systemowego okna zapisu Androida,
+- w oknie można wybrać folder „Pobrane” i zapisać gotowy plik PDF,
+- drukowanie pozostaje jako osobna funkcja „Drukuj”,
+- przy raporcie podzielonym na części każdą część można osobno zapisać albo wydrukować.

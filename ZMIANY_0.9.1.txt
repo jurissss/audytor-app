@@ -1,0 +1,8 @@
+Audytor 0.9.1+24
+
+PDF
+- osobny przycisk: Zapisz PDF w Pobranych
+- zapis przez systemowy selektor plików Androida
+- możliwość wybrania folderu Pobrane
+- osobny przycisk Drukuj
+- obsługa zapisu każdej części raportu osobno
