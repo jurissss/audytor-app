@@ -199,10 +199,11 @@ class AuditPackageService {
     final html = StringBuffer()
       ..writeln('<!doctype html><html><head><meta charset="utf-8"><title>Zdjęcia audytu</title></head><body>')
       ..writeln('<h1>Zdjęcia audytu</h1><p>Kliknij miniaturę, aby otworzyć zdjęcie zapisane w paczce.</p>');
-    for (final entries in photoManifestByDefect.values) {
-      for (final photo in entries) {
+    for (final item in photoManifestByDefect.entries) {
+      html.writeln('<h2 id="usterka-${item.key}">Usterka</h2>');
+      for (final photo in item.value) {
         final fileName = photo['file'] as String;
-        html.writeln('<p><a href="$fileName"><img src="$fileName" style="max-width:320px;max-height:220px"></a><br>$fileName</p>');
+        html.writeln('<p><a href="$fileName"><img src="$fileName" style="max-width:420px;max-height:300px"></a><br>$fileName</p>');
       }
     }
     html.writeln('</body></html>');
