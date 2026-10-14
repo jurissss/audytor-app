@@ -42,10 +42,17 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
 
   static const priorities = ['Niski', 'Średni', 'Wysoki', 'Krytyczny'];
 
+  static String _orderText(String value) {
+    final parsed = int.tryParse(value.trim());
+    return parsed == null ? value.trim() : parsed.toString();
+  }
+
   @override
   void initState() {
     super.initState();
-    _position = TextEditingController(text: widget.defect?.positionNo ?? widget.suggestedPosition);
+    _position = TextEditingController(
+      text: _orderText(widget.defect?.positionNo ?? widget.suggestedPosition),
+    );
     _location = TextEditingController(text: widget.defect?.location ?? '');
     _description = TextEditingController(text: widget.defect?.description ?? '');
     _recommendation = TextEditingController(text: widget.defect?.recommendation ?? '');
@@ -292,8 +299,12 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
                 Expanded(
                   child: TextFormField(
                     controller: _position,
-                    decoration: const InputDecoration(labelText: 'Nr pozycji *', prefixIcon: Icon(Icons.tag)),
-                    validator: (v) => v == null || v.trim().isEmpty ? 'Podaj nr pozycji' : null,
+                    readOnly: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Nr porządkowy',
+                      helperText: 'Nadawany automatycznie',
+                      prefixIcon: Icon(Icons.format_list_numbered),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -310,7 +321,10 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
             const SizedBox(height: 14),
             TextFormField(
               controller: _location,
-              decoration: const InputDecoration(labelText: 'Nazwa urządzenia / lokalizacja', prefixIcon: Icon(Icons.place_outlined)),
+              decoration: const InputDecoration(
+                labelText: 'Nazwa pozycji / urządzenia / lokalizacja',
+                prefixIcon: Icon(Icons.place_outlined),
+              ),
             ),
             const SizedBox(height: 14),
             TextFormField(

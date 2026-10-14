@@ -1,0 +1,13 @@
+Audytor 0.9.2+25
+
+NUMERACJA USTEREK
+- nowe usterki dostają automatyczny numer porządkowy 1, 2, 3 itd.
+- numer porządkowy nie jest edytowalny ręcznie
+- po usunięciu usterki w niezakończonym audycie pozostałe pozycje są ponownie numerowane kolejno
+
+PACZKA AUDYTU / ZDJĘCIA
+- zdjęcia w paczce są pogrupowane osobno dla każdej usterki
+- struktura: ZDJECIA/<numer>_<nazwa pozycji>_<krótki opis>/
+- przykładowy folder: 3_Agregat_mleczny_Nieszczelnosc_na_zaworze
+- zdjęcia w folderze mają nazwy: usterka_01.jpg, tabliczka_01.jpg, po_naprawie_01.jpg, uwaga_01.jpg
+- import paczek pozostaje zgodny z dotychczasowym formatem

@@ -156,8 +156,13 @@ class AuditPackageService {
 
     final allSources = <_SourcePhoto>[];
 
-    for (final defect in defects) {
+    for (var defectIndex = 0;
+        defectIndex < defects.length;
+        defectIndex++) {
+      final defect = defects[defectIndex];
       if (defect.id == null) continue;
+
+      final orderNo = defectIndex + 1;
 
       for (final photo
           in photos[defect.id] ??
@@ -166,6 +171,7 @@ class AuditPackageService {
           allSources.add(
             _SourcePhoto(
               defect: defect,
+              orderNo: orderNo,
               path: photo.path,
               kind: photo.kind,
               createdAt: photo.createdAt,
@@ -182,6 +188,7 @@ class AuditPackageService {
             allSources.add(
               _SourcePhoto(
                 defect: defect,
+                orderNo: orderNo,
                 path: path,
                 kind: 'note',
                 createdAt: note.createdAt,
@@ -209,7 +216,7 @@ class AuditPackageService {
     final notePhotosByNote =
         <int, List<Map<String, Object?>>>{};
 
-    var counter = 0;
+    final photoCounters = <String, int>{};
 
     for (final source in allSources) {
       final bytes =
@@ -218,8 +225,17 @@ class AuditPackageService {
         targetBytes: targetBytes,
       );
 
+      final folder = _defectFolder(
+        source.defect,
+        source.orderNo,
+      );
+      final kindName = _photoKindName(source.kind);
+      final counterKey = '$folder|$kindName';
+      final number = (photoCounters[counterKey] ?? 0) + 1;
+      photoCounters[counterKey] = number;
+
       final name =
-          'photos/${_safe(source.defect.positionNo)}_${counter.toString().padLeft(3, '0')}_${source.kind}.jpg';
+          'ZDJECIA/$folder/${kindName}_${number.toString().padLeft(2, '0')}.jpg';
 
       archive.addFile(
         ArchiveFile(
@@ -251,8 +267,6 @@ class AuditPackageService {
             )
             .add(entry);
       }
-
-      counter++;
     }
 
     final manifest = <String, Object?>{
@@ -274,7 +288,8 @@ class AuditPackageService {
         'notes': audit.notes,
         'status': audit.status,
       },
-      'defects': defects.map((defect) {
+      'defects': defects.asMap().entries.map((entry) {
+        final defect = entry.value;
         final followups =
             (notes[defect.id] ??
                     const <DefectNote>[])
@@ -291,6 +306,7 @@ class AuditPackageService {
         ).toList();
 
         return {
+          'order_no': entry.key + 1,
           'position_no': defect.positionNo,
           'location': defect.location,
           'description': defect.description,
@@ -330,7 +346,11 @@ class AuditPackageService {
     final readme = utf8.encode(
       'PACZKA AUDYTU - AUDYTOR\n\n'
       'Zawiera aktualny raport PDF, dane audytu, usterki, zdjęcia, '
-      'potwierdzenia napraw oraz historię uwag po audycie.\n',
+      'potwierdzenia napraw oraz historię uwag po audycie.\n\n'
+      'Zdjęcia są posegregowane w katalogu ZDJECIA. Każda usterka ma '
+      'osobny folder nazwany według schematu: NUMER_NAZWA_POZYCJI_KROTKI_OPIS.\n'
+      'W folderze usterki zdjęcia są dodatkowo opisane jako: usterka, '
+      'tabliczka, po_naprawie lub uwaga.\n',
     );
 
     archive.addFile(
@@ -807,6 +827,54 @@ class AuditPackageService {
     return '${value.year}${two(value.month)}${two(value.day)}_${two(value.hour)}${two(value.minute)}';
   }
 
+  static String _defectFolder(
+    Defect defect,
+    int orderNo,
+  ) {
+    final positionName = defect.location.trim().isEmpty
+        ? 'Pozycja'
+        : _shortText(defect.location, 36);
+    final shortDescription = _shortText(
+      defect.description,
+      48,
+    );
+
+    return '${orderNo}_${_safe(positionName)}_${_safe(shortDescription)}';
+  }
+
+  static String _photoKindName(String kind) {
+    switch (kind) {
+      case 'nameplate':
+        return 'tabliczka';
+      case 'resolution':
+        return 'po_naprawie';
+      case 'note':
+        return 'uwaga';
+      case 'issue':
+        return 'usterka';
+      default:
+        return 'usterka';
+    }
+  }
+
+  static String _shortText(
+    String value,
+    int maxLength,
+  ) {
+    final normalized = value
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+
+    if (normalized.isEmpty) return 'usterka';
+    if (normalized.length <= maxLength) {
+      return normalized;
+    }
+
+    return normalized
+        .substring(0, maxLength)
+        .trim();
+  }
+
   static String _safe(String value) {
     final cleaned =
         value.trim().replaceAll(
@@ -834,6 +902,7 @@ class _DecodedPackage {
 
 class _SourcePhoto {
   final Defect defect;
+  final int orderNo;
   final String path;
   final String kind;
   final DateTime createdAt;
@@ -841,6 +910,7 @@ class _SourcePhoto {
 
   const _SourcePhoto({
     required this.defect,
+    required this.orderNo,
     required this.path,
     required this.kind,
     required this.createdAt,

@@ -291,7 +291,41 @@ class DatabaseService {
 
   Future<void> deleteDefect(int id) async {
     final db = await database;
-    await db.delete('defects', where: 'id = ?', whereArgs: [id]);
+    await db.transaction((txn) async {
+      final rows = await txn.query(
+        'defects',
+        columns: ['audit_id'],
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      final auditId = rows.isEmpty ? null : rows.first['audit_id'] as int?;
+
+      await txn.delete('defects', where: 'id = ?', whereArgs: [id]);
+
+      if (auditId != null) {
+        final remaining = await txn.query(
+          'defects',
+          columns: ['id', 'position_no'],
+          where: 'audit_id = ?',
+          whereArgs: [auditId],
+          orderBy: "CAST(position_no AS INTEGER) ASC, position_no ASC, created_at ASC, id ASC",
+        );
+
+        for (var i = 0; i < remaining.length; i++) {
+          final expected = (i + 1).toString();
+          final current = (remaining[i]['position_no'] as String?) ?? '';
+          if (current != expected) {
+            await txn.update(
+              'defects',
+              {'position_no': expected},
+              where: 'id = ?',
+              whereArgs: [remaining[i]['id']],
+            );
+          }
+        }
+      }
+    });
   }
 
   Future<String> getNextPositionNo(int auditId) async {
@@ -301,7 +335,7 @@ class DatabaseService {
       final n = int.tryParse(defect.positionNo) ?? 0;
       if (n > max) max = n;
     }
-    return (max + 1).toString().padLeft(3, '0');
+    return (max + 1).toString();
   }
 
   Future<void> confirmDefectResolution(int defectId, String note) async {
